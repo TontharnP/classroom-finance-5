@@ -1,12 +1,14 @@
 "use client";
 import { useState } from "react";
-import { X, User, Edit2 } from "lucide-react";
+import { X, User, Edit2, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
+import toast from "react-hot-toast";
 import { useAppStore } from "@/lib/store";
 import type { Student } from "@/types";
 import { EditStudentModal } from "./EditStudentModal";
 import { QuickPayModal } from "../transactions/QuickPayModal";
+import { deleteStudent as deleteStudentRemote } from "@/lib/supabase/students";
 
 type StudentDetailModalProps = {
   isOpen: boolean;
@@ -20,10 +22,30 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
   const [activeTab, setActiveTab] = useState<TabType>("unpaid");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [quickPayScheduleId, setQuickPayScheduleId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const data = useAppStore((state) => state.data);
+  const deleteStudent = useAppStore((state) => state.deleteStudent);
   
   // Always get fresh student data from store to reflect updates
   const student = data.students.find(s => s.id === initialStudent.id) || initialStudent;
+
+  const handleDelete = async () => {
+    if (!confirm(`คุณแน่ใจหรือไม่ที่จะลบนักเรียน ${student.firstName} ${student.lastName}?\n\nการลบจะเป็นการถาวรและไม่สามารถกู้คืนได้`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await deleteStudentRemote(student.id);
+      deleteStudent(student.id);
+      toast.success("ลบนักเรียนสำเร็จ");
+      onClose();
+    } catch (error: any) {
+      console.error("Error deleting student:", error);
+      toast.error(error.message || "ไม่สามารถลบนักเรียนได้");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Calculate payment summary (partial payments remain unpaid until full)
   const studentTransactions = data.transactions.filter(
@@ -134,13 +156,24 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
                       onClick={() => setIsEditModalOpen(true)}
                       className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       aria-label="แก้ไข"
+                      title="แก้ไขข้อมูล"
                     >
                       <Edit2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="rounded-lg p-2 hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50"
+                      aria-label="ลบนักเรียน"
+                      title="ลบนักเรียน"
+                    >
+                      <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
                     </button>
                     <button
                       onClick={onClose}
                       className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       aria-label="ปิด"
+                      title="ปิด"
                     >
                       <X className="h-5 w-5" />
                     </button>
