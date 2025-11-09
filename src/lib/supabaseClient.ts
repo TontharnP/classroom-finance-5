@@ -11,4 +11,9 @@ if (!supabaseUrl || !supabaseKey) {
 	);
 }
 
-export const supabase = createClient(supabaseUrl || "", supabaseKey || "");
+// Use placeholder values when env vars are missing to allow build to complete
+// The app will warn at runtime but won't crash during static generation
+export const supabase = createClient(
+	supabaseUrl || "https://placeholder.supabase.co",
+	supabaseKey || "placeholder-anon-key"
+);
