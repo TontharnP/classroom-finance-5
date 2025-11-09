@@ -30,12 +30,24 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
   const student = data.students.find(s => s.id === initialStudent.id) || initialStudent;
 
   const handleDelete = async () => {
-    if (!confirm(`คุณแน่ใจหรือไม่ที่จะลบนักเรียน ${student.firstName} ${student.lastName}?\n\nการลบจะเป็นการถาวรและไม่สามารถกู้คืนได้`)) {
+    const relatedTransactions = data.transactions.filter(t => t.studentId === student.id);
+    const hasTransactions = relatedTransactions.length > 0;
+    
+    const confirmMessage = hasTransactions
+      ? `คุณแน่ใจหรือไม่ที่จะลบนักเรียน ${student.firstName} ${student.lastName}?\n\nรายการธุรกรรมที่เกี่ยวข้อง ${relatedTransactions.length} รายการจะถูกลบด้วย\n\nการลบจะเป็นการถาวรและไม่สามารถกู้คืนได้`
+      : `คุณแน่ใจหรือไม่ที่จะลบนักเรียน ${student.firstName} ${student.lastName}?\n\nการลบจะเป็นการถาวรและไม่สามารถกู้คืนได้`;
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
     setIsDeleting(true);
     try {
       await deleteStudentRemote(student.id);
+      // Delete related transactions from store
+      relatedTransactions.forEach(t => {
+        useAppStore.getState().deleteTransaction(t.id);
+      });
+      // Delete student from store
       deleteStudent(student.id);
       toast.success("ลบนักเรียนสำเร็จ");
       onClose();

@@ -100,6 +100,7 @@ export async function updateStudent(id: string, updates: StudentUpdate): Promise
 
 /**
  * Delete a student and their avatar
+ * Also deletes related transactions to maintain database consistency
  */
 export async function deleteStudent(id: string): Promise<void> {
   // First, get the student to check if they have an avatar
@@ -114,6 +115,17 @@ export async function deleteStudent(id: string): Promise<void> {
       // Log error but continue with student deletion
       console.warn("Failed to delete avatar for student, continuing with student deletion:", err);
     }
+  }
+
+  // Delete related transactions first (to satisfy foreign key constraints)
+  const { error: transactionsError } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("student_id", id);
+
+  if (transactionsError) {
+    console.error("Error deleting student transactions:", transactionsError);
+    throw new Error(`Failed to delete student transactions: ${transactionsError.message}`);
   }
 
   // Delete student record from database
