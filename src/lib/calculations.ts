@@ -5,6 +5,7 @@ interface BalanceSummary {
   incomeTxn: number;
   expenseTxn: number;
   studentIncome: { kplus: number; cash: number; truemoney: number; total: number };
+  methodBreakdown: { kplus: number; cash: number; truemoney: number };
 }
 
 export function calculateBalance(data: DataBundle): BalanceSummary {
@@ -27,6 +28,10 @@ export function calculateBalance(data: DataBundle): BalanceSummary {
         else if (t.method === "truemoney") truemoney += t.amount;
       } else {
         expenseTxn += t.amount;
+        // Subtract expense from method totals
+        if (t.method === "kplus") kplus -= t.amount;
+        else if (t.method === "cash") cash -= t.amount;
+        else if (t.method === "truemoney") truemoney -= t.amount;
       }
     } else if (t.source === "schedule" && t.kind === "income") {
       // Schedule payments for studentIncome total
@@ -49,7 +54,17 @@ export function calculateBalance(data: DataBundle): BalanceSummary {
     balance,
     incomeTxn,
     expenseTxn,
-    studentIncome: { kplus, cash, truemoney, total: studentTotal },
+    studentIncome: { 
+      kplus: scheduleKplus, 
+      cash: scheduleCash, 
+      truemoney: scheduleTruemoney, 
+      total: studentTotal 
+    },
+    methodBreakdown: { 
+      kplus, 
+      cash, 
+      truemoney 
+    },
   };
 }
 

@@ -32,9 +32,9 @@ export function DashboardOverview() {
 
       {/* Payment method breakdown */}
       <div className="grid gap-4 md:grid-cols-3">
-        <MethodCard label="K PLUS" amount={balance.studentIncome.kplus} />
-        <MethodCard label="เงินสด" amount={balance.studentIncome.cash} />
-        <MethodCard label="TrueMoney" amount={balance.studentIncome.truemoney} />
+        <MethodCard label="K PLUS" amount={balance.methodBreakdown.kplus} />
+        <MethodCard label="เงินสด" amount={balance.methodBreakdown.cash} />
+        <MethodCard label="TrueMoney" amount={balance.methodBreakdown.truemoney} />
       </div>
 
       {/* Student payment counts by schedule */}
