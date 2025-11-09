@@ -2,20 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import dashboardIcon from "@/image/dashboard.svg";
-import transactionsIcon from "@/image/transactions.svg";
-import schedulesIcon from "@/image/schedules.svg";
-import categoriesIcon from "@/image/category.svg";
-import studentsIcon from "@/image/students.svg";
 import logo from "@/image/logo/logo.svg";
-
-const items = [
-  { href: "/dashboard", label: "Dashboard", icon: dashboardIcon },
-  { href: "/transactions", label: "Transactions", icon: transactionsIcon },
-  { href: "/schedule", label: "Schedule", icon: schedulesIcon },
-  { href: "/categories", label: "Categories", icon: categoriesIcon },
-  { href: "/students", label: "Students", icon: studentsIcon },
-];
+import { NAV_ITEMS } from "@/components/layout/navItems";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -28,7 +16,7 @@ export function Sidebar() {
         <div className="text-base font-semibold tracking-wide">SMTE FINANCE 5.0</div>
       </div>
       <nav className="flex flex-col gap-1">
-        {items.map(({ href, label, icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon }) => {
           const active = pathname?.startsWith(href);
           return (
             <Link

@@ -20,6 +20,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* iOS notch safe areas for fixed headers/footers */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
 /* Calendar custom styles (moved from ScheduleCalendar.tsx) */
 .calendar-wrapper .react-calendar {
   width: 100%;

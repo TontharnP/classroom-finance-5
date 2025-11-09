@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Toaster } from "react-hot-toast";
 import { Sidebar } from "@/components/layout/Sidebar";
+import MobileNav from "../components/layout/MobileNav";
+import BottomTabNav from "../components/layout/BottomTabNav";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { HydrationGate } from "@/components/layout/HydrationGate";
 import "./globals.css";
@@ -41,19 +43,12 @@ export default function RootLayout({
               <Sidebar />
             </aside>
             <div className="flex min-h-screen flex-col">
-              <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-white/70 px-4 backdrop-blur dark:bg-black/40 md:hidden">
-                <Link href="/dashboard" className="font-semibold">
-                  Classroom Finance 5.0
-                </Link>
-                <nav className="flex gap-3 text-sm">
-                  <Link href="/dashboard">Dashboard</Link>
-                  <Link href="/transactions">Transactions</Link>
-                  <Link href="/schedule">Schedule</Link>
-                  <Link href="/students">Students</Link>
-                </nav>
-              </header>
+              {/* Mobile top bar with slide-out menu */}
+              <MobileNav />
               {/* Suspense fallback is also handled via route-level loading.tsx */}
-              <main className="flex-1 p-4 md:p-6">{children}</main>
+              <main className="flex-1 p-4 pb-24 md:pb-6 md:p-6 w-full max-w-7xl mx-auto">{children}</main>
+              {/* Bottom tab bar for mobile */}
+              <BottomTabNav />
             </div>
           </div>
         </HydrationGate>
@@ -61,3 +56,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+// MobileNav is a client component rendered only on small screens
