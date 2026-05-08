@@ -91,6 +91,21 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   const number = parseRegistrationNumber(normalized);
 
   if (!number) {
+    if (isRegistrationHelpCommand(normalized)) {
+      await replyLineText(event.replyToken, [
+        "ลงทะเบียนบัญชี LINE กับระบบการเงินห้องเรียน",
+        "พิมพ์เลขที่ของตัวเอง เช่น ลงทะเบียน 24",
+        "หลังลงทะเบียนแล้วสามารถกดเมนูชำระเงินได้ทันที",
+      ].join("\n"));
+      return;
+    }
+    if (isPlaceholderMenuCommand(normalized)) {
+      await replyLineText(event.replyToken, [
+        "เมนูนี้กำลังเตรียมใช้งาน",
+        "ตอนนี้ใช้เมนูชำระเงินเพื่อดูรายการค้างชำระและส่งสลิปได้ก่อน",
+      ].join("\n"));
+      return;
+    }
     if (normalized.startsWith("pay:schedule:")) {
       await handleScheduleSelection(event, normalized.replace("pay:schedule:", ""));
       return;
@@ -312,6 +327,14 @@ function parseRegistrationNumber(text: string) {
 
 function isPayCommand(text: string) {
   return ["ชำระเงิน", "จ่ายเงิน", "pay", "PAY_MENU"].includes(text.trim());
+}
+
+function isRegistrationHelpCommand(text: string) {
+  return ["ลงทะเบียน", "register", "REGISTER_MENU"].includes(text.trim());
+}
+
+function isPlaceholderMenuCommand(text: string) {
+  return ["เมนูสถานะ", "สถานะ", "เมนูประวัติ", "ประวัติ"].includes(text.trim());
 }
 
 async function getStudentByLineUserId(lineUserId: string | undefined) {
