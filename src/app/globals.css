@@ -1,0 +1,533 @@
+@import "tailwindcss";
+@import "react-calendar/dist/Calendar.css";
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #101119;
+  --muted: #85889a;
+  --muted-strong: #5d6172;
+  --panel: rgba(255, 255, 255, 0.66);
+  --panel-solid: #ffffff;
+  --panel-soft: rgba(247, 248, 252, 0.86);
+  --line: rgba(32, 35, 54, 0.10);
+  --line-strong: rgba(32, 35, 54, 0.16);
+  --primary: #6253c6;
+  --primary-strong: #4f3fae;
+  --primary-soft: rgba(98, 83, 198, 0.13);
+  --pink: #e84d96;
+  --cyan: #42bfd2;
+  --success: #10a66a;
+  --danger: #e34265;
+  --warning: #d98a19;
+  --shadow-soft: 0 22px 70px rgba(55, 58, 88, 0.12);
+  --shadow-card: 0 14px 42px rgba(55, 58, 88, 0.09);
+  --shadow-float: 0 30px 90px rgba(41, 38, 72, 0.18);
+  --radius-panel: 26px;
+  --radius-card: 18px;
+  --ease-apple: cubic-bezier(0.22, 1, 0.36, 1);
+  --blur-glass: blur(26px) saturate(1.35);
+  --blur-nav: blur(22px) saturate(1.28);
+}
+
+.dark {
+  --background: #0f1017;
+  --foreground: #f6f5fb;
+  --muted: #989caf;
+  --muted-strong: #c1c5d6;
+  --panel: rgba(24, 25, 35, 0.68);
+  --panel-solid: #181922;
+  --panel-soft: rgba(21, 22, 31, 0.86);
+  --line: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --primary: #9b8eff;
+  --primary-strong: #bbb3ff;
+  --primary-soft: rgba(155, 142, 255, 0.17);
+  --shadow-soft: 0 26px 76px rgba(0, 0, 0, 0.32);
+  --shadow-card: 0 18px 52px rgba(0, 0, 0, 0.28);
+  --shadow-float: 0 34px 100px rgba(0, 0, 0, 0.46);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Noto Sans Thai", sans-serif;
+}
+
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--background) 86%, var(--cyan) 14%), transparent 42%),
+    linear-gradient(240deg, color-mix(in srgb, var(--background) 82%, var(--pink) 18%), transparent 46%),
+    linear-gradient(180deg, var(--background), color-mix(in srgb, var(--background) 90%, var(--primary) 10%));
+}
+
+.ambient-bg::before,
+.ambient-bg::after {
+  content: "";
+  position: absolute;
+  inset: -24%;
+  transform: translateZ(0);
+  filter: blur(48px);
+  opacity: 0.72;
+  will-change: transform, opacity;
+}
+
+.ambient-bg::before {
+  background:
+    conic-gradient(from 120deg at 35% 30%,
+      transparent 0 18%,
+      color-mix(in srgb, var(--cyan) 28%, transparent) 24%,
+      transparent 38%,
+      color-mix(in srgb, var(--primary) 24%, transparent) 52%,
+      transparent 66%,
+      color-mix(in srgb, var(--pink) 20%, transparent) 78%,
+      transparent 100%);
+  animation: ambientDrift 24s var(--ease-apple) infinite alternate;
+}
+
+.ambient-bg::after {
+  inset: -18%;
+  background:
+    linear-gradient(135deg,
+      transparent 10%,
+      color-mix(in srgb, var(--primary) 13%, transparent) 34%,
+      transparent 56%,
+      color-mix(in srgb, var(--cyan) 12%, transparent) 78%,
+      transparent 100%);
+  animation: ambientFloat 30s var(--ease-apple) infinite alternate;
+}
+
+.dark .ambient-bg::before,
+.dark .ambient-bg::after {
+  opacity: 0.48;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 180ms var(--ease-apple),
+    border-color 180ms var(--ease-apple),
+    color 180ms var(--ease-apple),
+    box-shadow 220ms var(--ease-apple),
+    transform 220ms var(--ease-apple),
+    opacity 180ms var(--ease-apple);
+}
+
+input,
+select,
+textarea {
+  background: color-mix(in srgb, var(--panel-solid) 86%, transparent) !important;
+  border-color: var(--line-strong) !important;
+  color: var(--foreground);
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: color-mix(in srgb, var(--primary) 56%, var(--line-strong)) !important;
+  box-shadow: 0 0 0 4px var(--primary-soft);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+.app-shell {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, transparent), color-mix(in srgb, var(--panel) 72%, transparent));
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  overflow: hidden;
+}
+
+.apple-card {
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--panel) 82%, transparent));
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+}
+
+.apple-panel {
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 96%, transparent), color-mix(in srgb, var(--panel-solid) 88%, transparent));
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+}
+
+.apple-soft {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-soft) 94%, transparent), color-mix(in srgb, var(--panel-soft) 78%, transparent));
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.apple-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, var(--pink) 30%));
+  color: white;
+  font-weight: 650;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 26%, transparent);
+}
+
+.apple-button:hover {
+  background: var(--primary-strong);
+}
+
+.pressable:active {
+  transform: scale(0.985);
+}
+
+.motion-safe-transform {
+  transform: translateZ(0);
+}
+
+.apple-ghost-button,
+.apple-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-solid) 66%, transparent);
+  color: var(--foreground);
+  backdrop-filter: var(--blur-nav);
+  -webkit-backdrop-filter: var(--blur-nav);
+}
+
+.apple-icon-button {
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 16px;
+}
+
+.apple-ghost-button {
+  border-radius: 999px;
+  padding: 0.62rem 1rem;
+  font-weight: 600;
+}
+
+.apple-ghost-button:hover,
+.apple-icon-button:hover {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--line));
+  box-shadow: var(--shadow-card);
+}
+
+.apple-segmented {
+  display: inline-flex;
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-solid) 72%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.apple-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.7rem;
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.apple-segment-active {
+  background: var(--foreground);
+  color: var(--background);
+  box-shadow: var(--shadow-card);
+}
+
+.glass-nav {
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: var(--blur-nav);
+  -webkit-backdrop-filter: var(--blur-nav);
+}
+
+.nav-item {
+  color: var(--muted-strong);
+  border: 1px solid transparent;
+  position: relative;
+  isolation: isolate;
+}
+
+.nav-item:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.nav-item-active {
+  color: var(--primary);
+  background: linear-gradient(135deg, var(--primary-soft), color-mix(in srgb, var(--cyan) 8%, transparent));
+  border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 10px 22px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.visual-gradient {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 88%, #ffffff 12%), #6a58c9 44%, var(--pink));
+  background-size: 180% 180%;
+  animation: gradientShift 18s var(--ease-apple) infinite alternate;
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+/* iOS notch safe areas for fixed headers/footers */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+.calendar-wrapper .react-calendar {
+  width: 100%;
+  border: none;
+  border-radius: 24px;
+  background: transparent;
+  font-family: inherit;
+}
+
+.calendar-wrapper .react-calendar__tile {
+  padding: 16px 8px;
+  border-radius: 16px;
+  transition: all 0.22s var(--ease-apple);
+  position: relative;
+}
+
+.calendar-wrapper .react-calendar__tile:enabled:hover {
+  background-color: var(--primary-soft);
+}
+
+.calendar-wrapper .react-calendar__tile--active {
+  background-color: var(--primary) !important;
+  color: white;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.calendar-wrapper .react-calendar__tile--now {
+  background-color: color-mix(in srgb, var(--pink) 12%, transparent);
+}
+
+.calendar-wrapper .react-calendar__month-view__days__day--weekend {
+  color: var(--danger);
+}
+
+.calendar-wrapper .react-calendar__navigation button {
+  min-width: 44px;
+  border-radius: 16px;
+  padding: 12px;
+  font-weight: 650;
+}
+
+.page-stack {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: pageEnter 420ms var(--ease-apple) both;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.responsive-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.responsive-actions > * {
+  width: 100%;
+}
+
+.text-balance-safe {
+  overflow-wrap: anywhere;
+}
+
+.section-title {
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.page-kicker {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.polished-table {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .page-stack {
+    gap: 1.5rem;
+  }
+
+  .module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .responsive-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .responsive-actions > * {
+    width: auto;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .apple-button:hover,
+  .apple-ghost-button:hover,
+  .apple-icon-button:hover,
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  .calendar-wrapper .react-calendar__tile:enabled:hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-wrapper .react-calendar__tile {
+    padding: 10px 4px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+  }
+
+  .calendar-wrapper .react-calendar__navigation button {
+    min-width: 36px;
+    padding: 9px 6px;
+    font-size: 0.8rem;
+  }
+}
+
+.calendar-wrapper .react-calendar__navigation button:enabled:hover {
+  background-color: var(--primary-soft);
+}
+
+.calendar-wrapper .react-calendar__tile--hasSchedule::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--cyan);
+}
+
+.calendar-wrapper .react-calendar__tile--active.react-calendar__tile--hasSchedule::after {
+  background-color: white;
+}
+
+.dark .calendar-wrapper .react-calendar {
+  color: var(--foreground);
+}
+
+.dark .calendar-wrapper .react-calendar__month-view__weekdays {
+  color: var(--muted);
+}
+
+.loader-square {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, var(--primary), var(--pink));
+  border-radius: 18px;
+  box-shadow: var(--shadow-float);
+  animation: squareMorphRotate 1.2s var(--ease-apple) infinite;
+}
+
+@keyframes ambientDrift {
+  0% { transform: translate3d(-2%, -1%, 0) rotate(0deg) scale(1); }
+  100% { transform: translate3d(2%, 1%, 0) rotate(8deg) scale(1.04); }
+}
+
+@keyframes ambientFloat {
+  0% { transform: translate3d(2%, 1%, 0) rotate(0deg) scale(1.02); opacity: 0.5; }
+  100% { transform: translate3d(-1.5%, -1%, 0) rotate(-7deg) scale(1.06); opacity: 0.72; }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 20%; }
+  100% { background-position: 100% 80%; }
+}
+
+@keyframes pageEnter {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes squareMorphRotate {
+  0% { transform: rotate(0deg) scale(1); border-radius: 14px; }
+  25% { transform: rotate(90deg) scale(1.05); border-radius: 22px; }
+  50% { transform: rotate(180deg) scale(1); border-radius: 50%; }
+  75% { transform: rotate(270deg) scale(1.05); border-radius: 22px; }
+  100% { transform: rotate(360deg) scale(1); border-radius: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
