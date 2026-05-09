@@ -23,7 +23,7 @@ export default function StudentsPage() {
         <h1 className="section-title text-2xl sm:text-3xl md:text-4xl">นักเรียน</h1>
         <p className="page-kicker">ข้อมูลนักเรียน รูปโปรไฟล์ และสถานะการชำระเงิน</p>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="fixed-page-body">
         <ErrorBoundary>
           <Suspense fallback={<StudentsGridSkeleton />}>
             <StudentsGrid />

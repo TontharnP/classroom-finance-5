@@ -347,7 +347,7 @@ export function StudentsGrid() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex flex-col">
       <AddStudentModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
       {selectedStudent && (
         <StudentDetailModal
@@ -358,7 +358,7 @@ export function StudentsGrid() {
       )}
 
       <div className="grid shrink-0 gap-3 pb-3 sm:pb-4">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <SummaryCard icon={<UsersRound className="h-5 w-5" />} label="นักเรียนทั้งหมด" value={`${summary.totalStudents} คน`} tone="blue" />
           <SummaryCard icon={<WalletCards className="h-5 w-5" />} label="ค้างชำระ" value={`${summary.owingStudents} คน`} detail={`${summary.totalOutstanding.toLocaleString()} ฿`} tone="amber" />
           <SummaryCard icon={<AlertTriangle className="h-5 w-5" />} label="เลยกำหนด" value={`${summary.overdueStudents} คน`} tone="rose" />
@@ -553,7 +553,7 @@ export function StudentsGrid() {
         </div>
       </div>
 
-      <div className="student-card-scroll -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4 sm:pr-2">
+      <div className="-mx-1 px-1 pb-4">
         <div className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -623,14 +623,14 @@ function SummaryCard({
   }[tone];
 
   return (
-    <div className="apple-card flex min-w-0 items-center gap-3 p-3">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${toneClass}`} style={{ background: "var(--primary-soft)" }}>
+    <div className="apple-card flex min-w-0 items-center gap-2 p-2.5 sm:gap-3 sm:p-3">
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl sm:h-10 sm:w-10 ${toneClass}`} style={{ background: "var(--primary-soft)" }}>
         {icon}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-xs font-semibold text-[var(--muted-strong)]">{label}</div>
-        <div className={`truncate text-lg font-bold ${toneClass}`}>{value}</div>
-        {detail && <div className="truncate text-xs font-medium text-[var(--muted)]">{detail}</div>}
+        <div className="truncate text-[11px] font-semibold text-[var(--muted-strong)] sm:text-xs">{label}</div>
+        <div className={`truncate text-base font-bold sm:text-lg ${toneClass}`}>{value}</div>
+        {detail && <div className="truncate text-[11px] font-medium text-[var(--muted)] sm:text-xs">{detail}</div>}
       </div>
     </div>
   );

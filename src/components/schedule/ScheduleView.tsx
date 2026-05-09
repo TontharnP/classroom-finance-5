@@ -328,7 +328,7 @@ export function ScheduleView({ searchParamsPromise }: ScheduleViewProps) {
   const rootFolders = foldersByParent.get("root") || [];
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-2 sm:gap-5 md:gap-6">
+    <div className="flex min-w-0 flex-col gap-2 sm:gap-5 md:gap-6">
       <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
         <button
           onClick={() => createFolder()}
@@ -357,9 +357,9 @@ export function ScheduleView({ searchParamsPromise }: ScheduleViewProps) {
         />
       )}
 
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="grid h-full min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,0.8fr)]">
-          <div className="student-card-scroll order-2 min-h-0 space-y-2 overflow-y-auto pr-1 sm:space-y-3 xl:order-1 xl:pr-2">
+      <div>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,0.8fr)]">
+          <div className="order-2 space-y-2 sm:space-y-3 xl:order-1">
             {rootFolders.length === 0 ? (
               <div className="apple-card p-6 text-center text-muted">
                 ยังไม่มีโฟลเดอร์ — กดเพิ่มโฟลเดอร์เพื่อเริ่มจัดกลุ่มกำหนดการ
@@ -369,7 +369,7 @@ export function ScheduleView({ searchParamsPromise }: ScheduleViewProps) {
             )}
           </div>
 
-          <div className="apple-card order-1 min-h-0 overflow-y-auto p-3 sm:p-5 xl:order-2">
+          <div className="apple-card order-1 p-3 sm:p-5 xl:order-2">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold sm:text-lg">ปฏิทินกำหนดการ</h2>

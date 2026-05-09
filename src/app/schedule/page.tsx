@@ -29,7 +29,7 @@ export default function SchedulePage({
         <h1 className="section-title text-2xl sm:text-3xl md:text-4xl">กำหนดการ</h1>
         <p className="page-kicker">จัดกลุ่มการเก็บเงินตามโฟลเดอร์ วันที่ และสถานะการชำระ</p>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="fixed-page-body">
         <ErrorBoundary>
           <Suspense fallback={<ScheduleViewSkeleton />}>
             <ScheduleView searchParamsPromise={searchParams} />

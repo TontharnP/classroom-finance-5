@@ -39,7 +39,7 @@ export default function TransactionsPage() {
         <h1 className="section-title text-2xl sm:text-3xl md:text-4xl">รายการเงิน</h1>
         <p className="page-kicker">ค้นหา กรอง และตรวจสอบรายรับรายจ่ายทั้งหมด</p>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="fixed-page-body">
         <ErrorBoundary>
           <Suspense fallback={<TransactionsListSkeleton />}>
             <TransactionsList />

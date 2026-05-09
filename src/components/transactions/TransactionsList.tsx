@@ -119,7 +119,7 @@ export function TransactionsList() {
   }, [data.transactions, data.students, source, kind, method, debouncedSearch]);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 sm:gap-4">
+    <div className="flex min-w-0 flex-col gap-1.5 sm:gap-4">
       {/* Tabs + Filters */}
       <div className="apple-card flex min-w-0 shrink-0 flex-col gap-1.5 p-2 sm:gap-3 sm:p-4">
         {/* Tabs */}
@@ -284,7 +284,7 @@ export function TransactionsList() {
       <AddTransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
 
       {/* Statement Table / List */}
-      <div className="student-card-scroll min-h-0 flex-1 overflow-y-auto sm:pr-2">
+      <div>
       <div className="polished-table min-w-0">
         {/* Mobile View (Cards) */}
         <div className="block divide-y md:hidden" style={{ borderColor: "var(--line)" }}>
