@@ -1,12 +1,13 @@
 "use client";
 import { useState, useMemo } from "react";
-import { X, Edit2, Trash2 } from "lucide-react";
+import { X, Edit2, Trash2, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { deleteCategory as deleteCategoryRemote, deleteCategoryIcon } from "@/lib/supabase/categories";
 import type { Category } from "@/types";
 import { EditCategoryModal } from "./EditCategoryModal";
+import { EditTransactionModal } from "../transactions/EditTransactionModal";
 import { getIconComponent } from "./IconPicker";
 import toast from "react-hot-toast";
 
@@ -20,6 +21,7 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const data = useAppStore((state) => state.data);
   const deleteCategory = useAppStore((state) => state.deleteCategory);
   
@@ -42,6 +44,9 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
     }, 0),
     [categoryTransactions]
   );
+  const editingTransaction = editingTransactionId
+    ? data.transactions.find((transaction) => transaction.id === editingTransactionId)
+    : null;
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -156,15 +161,26 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
                       className="flex items-center justify-between rounded-xl border p-2"
                       style={{ borderColor: "var(--line)" }}
                     >
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-medium">{t.name}</p>
                         <p className="text-xs text-zinc-500">
                           {format(new Date(t.createdAt), "dd/MM/yyyy HH:mm")}
                         </p>
                       </div>
-                      <p className={`font-semibold ${t.kind === "income" ? "text-emerald-600" : "text-rose-600"}`}>
-                        {t.kind === "income" ? "+" : "-"}{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿
-                      </p>
+                      <div className="ml-3 flex shrink-0 items-center gap-2">
+                        <p className={`font-semibold ${t.kind === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                          {t.kind === "income" ? "+" : "-"}{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTransactionId(t.id)}
+                          className="apple-icon-button h-8 w-8 rounded-xl"
+                          aria-label="แก้ไขรายการ"
+                          title="แก้ไขรายการ"
+                        >
+                          <Pencil className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -216,6 +232,13 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
             onClose={() => setIsEditModalOpen(false)}
             category={category}
           />
+          {editingTransaction && (
+            <EditTransactionModal
+              isOpen={!!editingTransaction}
+              onClose={() => setEditingTransactionId(null)}
+              transaction={editingTransaction}
+            />
+          )}
         </>
       )}
     </AnimatePresence>

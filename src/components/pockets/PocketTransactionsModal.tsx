@@ -1,10 +1,12 @@
 "use client";
 import { Modal } from "@/components/ui/Modal";
 import { useAppStore } from "@/lib/store";
-import { Transaction, Pocket } from "@/types";
-import { useMemo } from "react";
+import type { Pocket } from "@/types";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
+import { Pencil } from "lucide-react";
+import { EditTransactionModal } from "../transactions/EditTransactionModal";
 
 interface Props {
     isOpen: boolean;
@@ -14,6 +16,7 @@ interface Props {
 
 export function PocketTransactionsModal({ isOpen, onClose, pocket }: Props) {
     const data = useAppStore((state) => state.data);
+    const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
 
     const transactions = useMemo(() => {
         // Logic must match calculatePocketBalance
@@ -38,6 +41,10 @@ export function PocketTransactionsModal({ isOpen, onClose, pocket }: Props) {
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }, [data.transactions, pocket.id]);
 
+    const editingTransaction = editingTransactionId
+        ? data.transactions.find((transaction) => transaction.id === editingTransactionId)
+        : null;
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`รายการใน ${pocket.name}`}>
             <div className="space-y-4">
@@ -47,7 +54,7 @@ export function PocketTransactionsModal({ isOpen, onClose, pocket }: Props) {
                     <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                         {transactions.map((t) => (
                             <div key={t.id} className="flex items-center justify-between rounded-lg border p-3 text-sm dark:border-zinc-700">
-                                <div>
+                                <div className="min-w-0">
                                     <div className="font-medium">{t.name}</div>
                                     {t.studentId && (
                                         <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
@@ -66,16 +73,34 @@ export function PocketTransactionsModal({ isOpen, onClose, pocket }: Props) {
                                         </div>
                                     )}
                                 </div>
-                                <div className={`font-mono font-medium ${t.kind === "income" || (t.kind === "transfer" && t.destinationPocketId === pocket.id)
-                                    ? "text-emerald-600 dark:text-emerald-400"
-                                    : "text-rose-600 dark:text-rose-400"
-                                    }`}>
-                                    {t.kind === "income" || (t.kind === "transfer" && t.destinationPocketId === pocket.id) ? "+" : "-"}
-                                    {t.amount.toLocaleString()} ฿
+                                <div className="ml-3 flex shrink-0 items-center gap-2">
+                                    <div className={`font-mono font-medium ${t.kind === "income" || (t.kind === "transfer" && t.destinationPocketId === pocket.id)
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-rose-600 dark:text-rose-400"
+                                        }`}>
+                                        {t.kind === "income" || (t.kind === "transfer" && t.destinationPocketId === pocket.id) ? "+" : "-"}
+                                        {t.amount.toLocaleString()} ฿
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingTransactionId(t.id)}
+                                        className="apple-icon-button h-8 w-8 rounded-xl"
+                                        aria-label="แก้ไขรายการ"
+                                        title="แก้ไขรายการ"
+                                    >
+                                        <Pencil className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
+                )}
+                {editingTransaction && (
+                    <EditTransactionModal
+                        isOpen={!!editingTransaction}
+                        onClose={() => setEditingTransactionId(null)}
+                        transaction={editingTransaction}
+                    />
                 )}
             </div>
         </Modal>
