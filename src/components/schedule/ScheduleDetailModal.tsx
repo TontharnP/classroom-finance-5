@@ -481,7 +481,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                     ))}
                   </div>
                 </div>
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pb-4 pr-1">
                   {filteredStudents.length === 0 ? (
                     <div className="py-12 text-center text-zinc-500">
                       {statusFilter === "all" ? "ไม่มีนักเรียนในกำหนดการนี้" : statusFilter === "paid" ? "ยังไม่มีนักเรียนที่ชำระแล้ว" : "ไม่มีนักเรียนค้างชำระ"}

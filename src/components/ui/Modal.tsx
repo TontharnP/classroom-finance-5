@@ -38,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children, size = "md" }: ModalPr
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-end p-2 sm:place-items-center sm:p-4">
+        <div className="fixed inset-0 z-50 grid place-items-center p-2 sm:p-4">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
