@@ -101,11 +101,12 @@ async function handleAction(event: LineWebhookEvent, action: string) {
     if (isRegistrationHelpCommand(normalized)) {
       const registeredStudent = await getStudentByLineUserId(event.source.userId);
       if (registeredStudent) {
-        await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
+        const menuLink = await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
         await replyLineText(event.replyToken, [
           "บัญชี LINE นี้ลงทะเบียนแล้ว",
           `${registeredStudent.prefix} ${registeredStudent.first_name} ${registeredStudent.last_name}`,
           `เลขที่ ${registeredStudent.number}`,
+          menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้ว" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้ง",
           "ถ้าต้องการเปลี่ยนคน ให้เหรัญญิกลบ LINE User ID ในระบบก่อน",
         ].join("\n"));
         return;
@@ -148,11 +149,12 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   const students = studentRows.map(mapStudent);
   const registeredStudent = students.find((item) => item.line_user_id === event.source?.userId);
   if (registeredStudent) {
-    await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
+    const menuLink = await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
     await replyLineText(event.replyToken, [
       "บัญชี LINE นี้ลงทะเบียนแล้ว",
       `${registeredStudent.prefix} ${registeredStudent.first_name} ${registeredStudent.last_name}`,
       `เลขที่ ${registeredStudent.number}`,
+      menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้ว" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้ง",
       registeredStudent.number === number
         ? "ไม่ต้องลงทะเบียนซ้ำ สามารถกดเมนูชำระเงินได้เลย"
         : "ไม่สามารถลงทะเบียนซ้ำเป็นนักเรียนคนอื่นได้ ถ้าต้องการเปลี่ยนให้เหรัญญิกลบ LINE User ID ในระบบก่อน",
@@ -176,12 +178,13 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   }
 
   await updateRecord<Row>("students", student.id, { line_user_id: event.source.userId }, studentColumns);
-  await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
+  const menuLink = await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
 
   await replyLineText(event.replyToken, [
     "ลงทะเบียน LINE สำเร็จ",
     `${student.prefix} ${student.first_name} ${student.last_name}`,
     `เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`,
+    menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้ว" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้ง",
     "ระบบจะใช้บัญชีนี้สำหรับแจ้งเตือนกำหนดการชำระเงิน",
   ].join("\n"));
 }
@@ -378,7 +381,7 @@ async function cancelActivePayment(event: LineWebhookEvent) {
 
 function parseRegistrationNumber(text: string) {
   const normalized = text.replace(/\s+/g, " ").trim();
-  const match = normalized.match(/^(?:ลงทะเบียน|register)?\s*(\d{1,3})$/i);
+  const match = normalized.match(/^(?:ลงทะเบียน)?\s*(\d{1,3})$/i);
   if (!match) return null;
   const number = Number(match[1]);
   return Number.isInteger(number) && number > 0 ? number : null;
@@ -393,7 +396,7 @@ function isCancelCommand(text: string) {
 }
 
 function isRegistrationHelpCommand(text: string) {
-  return ["ลงทะเบียน", "register", "REGISTER_MENU"].includes(text.trim());
+  return ["ลงทะเบียน"].includes(text.trim());
 }
 
 function isPlaceholderMenuCommand(text: string) {
