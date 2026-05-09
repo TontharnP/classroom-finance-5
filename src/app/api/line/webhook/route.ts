@@ -105,20 +105,26 @@ async function handleAction(event: LineWebhookEvent, action: string) {
       if (registeredStudent) {
         const menuLink = await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
         await replyLineText(event.replyToken, [
-          "บัญชี LINE นี้ลงทะเบียนแล้ว",
+          "บัญชี LINE นี้ลงทะเบียนไว้แล้วครับ ✅",
+          "ไม่ต้องสมัครซ้ำ บอทจำได้อยู่น้า",
+          "",
           `${registeredStudent.prefix} ${registeredStudent.first_name} ${registeredStudent.last_name}`,
           `เลขที่ ${registeredStudent.number}`,
-          menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้ว" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้ง",
-          "ถ้าต้องการเปลี่ยนคน ให้เหรัญญิกลบ LINE User ID ในระบบก่อน",
+          "",
+          menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้วครับ" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้งนะครับ",
+          "ถ้าต้องการเปลี่ยนเป็นคนอื่น ต้องให้เหรัญญิกลบ LINE User ID ในระบบก่อนนะครับ",
         ].join("\n"));
         return;
       }
 
       await linkLineRichMenuByName(event.source.userId, REGISTER_RICH_MENU_NAME);
       await replyLineText(event.replyToken, [
-        "ลงทะเบียนบัญชี LINE กับระบบการเงินห้องเรียน",
-        "พิมพ์เลขที่ของตัวเอง เช่น ลงทะเบียน 24",
-        "หลังลงทะเบียนแล้วสามารถกดเมนูชำระเงินได้ทันที",
+        "มาลงทะเบียน LINE กับระบบการเงินห้องเรียนกันครับ ✨",
+        "พิมพ์เลขที่ของตัวเองตามตัวอย่างนี้ได้เลย",
+        "",
+        "ลงทะเบียน 24",
+        "",
+        "พอลงทะเบียนเสร็จ จะกดเมนู ชำระเงิน ต่อได้ทันทีครับ 🚀",
       ].join("\n"));
       return;
     }
@@ -129,8 +135,10 @@ async function handleAction(event: LineWebhookEvent, action: string) {
         return;
       }
       await replyLineText(event.replyToken, [
-        "เมนูนี้กำลังเตรียมใช้งาน",
-        "ตอนนี้ใช้เมนูชำระเงินเพื่อดูรายการค้างชำระและส่งสลิปได้ก่อน",
+        "เมนูนี้กำลังอยู่ระหว่างเตรียมเปิดใช้งานครับ 🚧",
+        "ทีมงานกำลังปั้นอยู่ ยังไม่สุกดี",
+        "",
+        "ตอนนี้ใช้เมนู ชำระเงิน เพื่อดูรายการค้างชำระและส่งสลิปไปก่อนได้เลยครับ 💸",
       ].join("\n"));
       return;
     }
@@ -152,14 +160,18 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   const registeredStudent = students.find((item) => item.line_user_id === event.source?.userId);
   if (registeredStudent) {
     const menuLink = await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
+    const isSameNumber = registeredStudent.number === number;
     await replyLineText(event.replyToken, [
-      "บัญชี LINE นี้ลงทะเบียนแล้ว",
+      "บัญชี LINE นี้ลงทะเบียนไว้แล้วครับ ✅",
+      isSameNumber ? "คนนี้แหละ ใช่เลย ไม่ต้องลงซ้ำแล้วน้า" : "ตอนนี้ผูกอยู่กับ",
+      "",
       `${registeredStudent.prefix} ${registeredStudent.first_name} ${registeredStudent.last_name}`,
       `เลขที่ ${registeredStudent.number}`,
-      menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้ว" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้ง",
-      registeredStudent.number === number
-        ? "ไม่ต้องลงทะเบียนซ้ำ สามารถกดเมนูชำระเงินได้เลย"
-        : "ไม่สามารถลงทะเบียนซ้ำเป็นนักเรียนคนอื่นได้ ถ้าต้องการเปลี่ยนให้เหรัญญิกลบ LINE User ID ในระบบก่อน",
+      "",
+      menuLink.ok ? (isSameNumber ? "กดเมนู ชำระเงิน ใช้งานต่อได้เลยครับ 💸" : "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้วครับ") : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้งนะครับ",
+      isSameNumber
+        ? ""
+        : "เพื่อความปลอดภัย บัญชี LINE เดียวจะเปลี่ยนไปเป็นคนอื่นเองไม่ได้ครับ 🔐\nถ้าต้องการเปลี่ยนจริง ๆ ให้เหรัญญิกลบ LINE User ID ในระบบก่อนนะครับ",
     ].join("\n"));
     return;
   }
@@ -167,14 +179,22 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   const student = students.find((item) => item.number === number);
 
   if (!student) {
-    await replyLineText(event.replyToken, `ไม่พบนักเรียนเลขที่ ${number}\nกรุณาตรวจสอบเลขที่แล้วส่งใหม่ เช่น ลงทะเบียน ${number}`);
+    await replyLineText(event.replyToken, [
+      `ไม่พบนักเรียนเลขที่ ${number} ครับ 🧐`,
+      "เหมือนเลขที่จะยังไม่อยู่ในระบบ หรืออาจพิมพ์ผิดนิดนึง",
+      "",
+      "ลองตรวจสอบเลขที่ แล้วส่งใหม่แบบนี้ได้เลย",
+      `ลงทะเบียน ${number}`,
+    ].join("\n"));
     return;
   }
 
   if (student.line_user_id && student.line_user_id !== event.source.userId) {
     await replyLineText(event.replyToken, [
-      `เลขที่ ${student.number} มีบัญชี LINE ที่ลงทะเบียนอยู่แล้ว`,
-      "ถ้าต้องการเปลี่ยนบัญชี ให้เหรัญญิกลบ LINE User ID ของนักเรียนคนนี้ในระบบก่อน",
+      `เลขที่ ${student.number} มีบัญชี LINE ลงทะเบียนไว้แล้วครับ 👀`,
+      "",
+      "ถ้าต้องการเปลี่ยนไปใช้บัญชี LINE นี้แทน",
+      "ให้เหรัญญิกลบ LINE User ID เดิมของนักเรียนคนนี้ในระบบก่อนนะครับ 🔐",
     ].join("\n"));
     return;
   }
@@ -183,11 +203,20 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   const menuLink = await linkLineRichMenuByName(event.source.userId, REGISTERED_RICH_MENU_NAME);
 
   await replyLineText(event.replyToken, [
-    "ลงทะเบียน LINE สำเร็จ",
+    "ลงทะเบียนสำเร็จแล้วครับ 🎉",
+    menuLink.ok
+      ? "ยินดีต้อนรับเข้าสู่ระบบการเงินห้องเรียนแบบดิจิทัลสุด ๆ"
+      : "ข้อมูลเข้าระบบเรียบร้อย แต่เมนูยังไม่ยอมเปลี่ยนตามนิดนึง 😅",
+    "",
     `${student.prefix} ${student.first_name} ${student.last_name}`,
     `เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`,
-    menuLink.ok ? "เมนูถูกเปลี่ยนเป็น ชำระเงิน / สถานะ / ประวัติ แล้ว" : "ยังเปลี่ยนเมนูไม่ได้ กรุณาให้เหรัญญิกรันตั้งค่า Rich Menu อีกครั้ง",
-    "ระบบจะใช้บัญชีนี้สำหรับแจ้งเตือนกำหนดการชำระเงิน",
+    "",
+    menuLink.ok
+      ? "เปลี่ยนเมนูเป็น ชำระเงิน / สถานะ / ประวัติ ให้เรียบร้อยแล้วครับ"
+      : "รบกวนให้เหรัญญิกช่วยรันตั้งค่า Rich Menu อีกครั้งนะครับ",
+    menuLink.ok
+      ? "ต่อไปแจ้งเตือนเรื่องชำระเงินจะส่งมาที่บัญชีนี้นะครับ 🔔"
+      : "ส่วนบัญชีนี้ ระบบจะใช้แจ้งเตือนกำหนดการชำระเงินได้ตามปกติครับ 🔔",
   ].join("\n"));
 }
 
@@ -200,14 +229,20 @@ async function showPayMenu(event: LineWebhookEvent) {
 
   const debts = await getUnpaidSchedulesForStudent(student.id);
   if (debts.length === 0) {
-    await replyLineText(event.replyToken, "ตอนนี้ไม่มีรายการค้างชำระ");
+    await replyLineText(event.replyToken, [
+      "ตอนนี้ไม่มีรายการค้างชำระครับ ✅",
+      "กระเป๋าสตางค์รอดแล้ววันนี้ 😆",
+    ].join("\n"));
     return;
   }
 
   await replyLineMessages(event.replyToken, [
     {
       type: "text",
-      text: "เลือกรายการที่ต้องการชำระ",
+      text: [
+        "มีรายการที่ต้องชำระอยู่ครับ 💸",
+        "เลือกรายการที่ต้องการจ่ายได้เลย",
+      ].join("\n"),
       quickReply: {
         items: [
           ...debts.slice(0, 12).map(({ schedule, remaining }) => ({
@@ -229,13 +264,22 @@ async function showPayMenu(event: LineWebhookEvent) {
 async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: string) {
   const student = await getStudentByLineUserId(event.source?.userId);
   if (!student) {
-    await replyLineText(event.replyToken, "กรุณาลงทะเบียนก่อนใช้งาน\nตัวอย่าง: ลงทะเบียน 24");
+    await replyLineText(event.replyToken, [
+      "ต้องลงทะเบียนก่อนใช้งานครับ 👀",
+      "ระบบจะได้รู้ว่าใครกำลังจะจ่าย",
+      "",
+      "ตัวอย่าง: ลงทะเบียน 24",
+    ].join("\n"));
     return;
   }
 
   const debt = (await getUnpaidSchedulesForStudent(student.id)).find((item) => item.schedule.id === scheduleId);
   if (!debt) {
-    await replyLineText(event.replyToken, "รายการนี้ชำระครบแล้วหรือไม่อยู่ในรายการของคุณ");
+    await replyLineText(event.replyToken, [
+      "รายการนี้ชำระครบแล้ว หรือไม่อยู่ในรายการของคุณครับ 🧐",
+      "",
+      "ลองกดเมนู ชำระเงิน เพื่อดูรายการล่าสุดอีกครั้งนะครับ",
+    ].join("\n"));
     return;
   }
 
@@ -266,7 +310,9 @@ async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: stri
       text: [
         `รายการ: ${debt.schedule.name}`,
         `ยอดค้าง: ${debt.remaining.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-        "เลือกวิธีชำระเงิน",
+        "",
+        "เลือกวิธีชำระเงินได้เลยครับ",
+        "จะโอน จะวอลเล็ต หรือจะเงินสดก็จัดไป 😎",
       ].join("\n"),
       quickReply: {
         items: [
@@ -282,29 +328,44 @@ async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: stri
 
 async function handleMethodSelection(event: LineWebhookEvent, requestId: string, method: string) {
   if (!["kplus", "truemoney", "cash"].includes(method)) {
-    await replyLineText(event.replyToken, "วิธีชำระเงินไม่ถูกต้อง");
+    await replyLineText(event.replyToken, [
+      "วิธีชำระเงินนี้ยังไม่ถูกต้องครับ 🧐",
+      "ลองเลือกจากปุ่มที่ระบบแสดงให้อีกครั้งนะครับ",
+    ].join("\n"));
     return;
   }
 
   const requests = await listRecords<Row>("line_payment_requests");
   const row = requests.find((request) => request.id === requestId);
   if (!row) {
-    await replyLineText(event.replyToken, "ไม่พบรายการชำระเงิน กรุณาเริ่มใหม่โดยพิมพ์ ชำระเงิน");
+    await replyLineText(event.replyToken, [
+      "ไม่พบรายการชำระเงินครับ 😅",
+      "รายการอาจหมดอายุ หรือถูกยกเลิกไปแล้ว",
+      "",
+      "เริ่มใหม่ได้โดยพิมพ์ ชำระเงิน",
+    ].join("\n"));
     return;
   }
 
   const request = mapLinePaymentRequest(row);
   if (request.line_user_id !== event.source?.userId) {
-    await replyLineText(event.replyToken, "รายการนี้ไม่ตรงกับบัญชี LINE ของคุณ");
+    await replyLineText(event.replyToken, [
+      "รายการนี้ไม่ตรงกับบัญชี LINE ของคุณครับ 🔐",
+      "ระบบเลยไปต่อให้ไม่ได้ เพื่อความปลอดภัยนะครับ",
+    ].join("\n"));
     return;
   }
 
   if (method === "cash") {
     await updateRecord<Row>("line_payment_requests", request.id, { method, status: "cash_pending" }, ["method", "status"]);
     await replyLineText(event.replyToken, [
-      "รับเรื่องชำระเงินสดแล้ว",
+      "รับเรื่องชำระเงินสดไว้แล้วครับ 💵",
+      "สายเงินสดมาเอง",
+      "",
       `ยอดเงิน: ${request.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-      "กรุณาชำระกับเหรัญญิก ระบบจะบันทึกเมื่อเหรัญญิกยืนยัน",
+      "",
+      "นำเงินไปชำระกับเหรัญญิกได้เลยครับ",
+      "ระบบจะบันทึกยอดให้หลังจากเหรัญญิกยืนยันนะครับ",
     ].join("\n"));
     return;
   }
@@ -317,9 +378,12 @@ async function handleMethodSelection(event: LineWebhookEvent, requestId: string,
     {
       type: "text",
       text: [
-        method === "kplus" ? "สแกนจ่ายผ่าน K PLUS" : "สแกนจ่ายผ่าน TrueMoney",
+        method === "kplus" ? "สแกนจ่ายผ่าน K PLUS ได้เลยครับ 🟢" : "สแกนจ่ายผ่าน TrueMoney ได้เลยครับ 🧡",
+        "",
         `ยอดเงิน: ${request.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-        "หลังชำระแล้ว ส่งรูปสลิปกลับมาในแชทนี้",
+        "",
+        "จ่ายเสร็จแล้ว ส่งรูปสลิปกลับมาในแชทนี้ได้เลยครับ 📸",
+        "บอทรอสลิปอยู่น้า",
       ].join("\n"),
     },
     {
@@ -337,7 +401,12 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
   if (!activeRequest) {
-    await replyLineText(event.replyToken, "ยังไม่มีรายการที่รอสลิป กรุณาเริ่มจากเมนูชำระเงินก่อน");
+    await replyLineText(event.replyToken, [
+      "ตอนนี้ยังไม่มีรายการที่รอสลิปครับ 👀",
+      "บอทงงนิดนึงว่าสลิปนี้ของรายการไหน",
+      "",
+      "เริ่มจากเมนู ชำระเงิน ก่อน แล้วค่อยส่งสลิปเข้ามานะครับ",
+    ].join("\n"));
     return;
   }
 
@@ -359,7 +428,12 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     ["status", "slip_url", "slip_pathname"]
   );
 
-  await replyLineText(event.replyToken, "ได้รับสลิปแล้ว รอเหรัญญิกตรวจสอบและยืนยันในระบบ");
+  await replyLineText(event.replyToken, [
+    "ได้รับสลิปแล้วครับ 📸✨",
+    "บอทเก็บไว้ให้เรียบร้อย",
+    "",
+    "รอเหรัญญิกตรวจสอบและยืนยันในระบบนะครับ",
+  ].join("\n"));
 }
 
 async function cancelActivePayment(event: LineWebhookEvent) {
@@ -377,14 +451,20 @@ async function cancelActivePayment(event: LineWebhookEvent) {
     );
 
   if (activeRequests.length === 0) {
-    await replyLineText(event.replyToken, "ไม่มีรายการชำระเงินที่กำลังดำเนินการอยู่");
+    await replyLineText(event.replyToken, [
+      "ตอนนี้ไม่มีรายการชำระเงินที่กำลังดำเนินการอยู่ครับ 👀",
+      "ไม่มีอะไรให้ยกเลิกแล้วน้า",
+    ].join("\n"));
     return;
   }
 
   await Promise.all(activeRequests.map((request) =>
     updateRecord<Row>("line_payment_requests", request.id, { status: "expired", note: "Cancelled by LINE user" }, ["status", "note"])
   ));
-  await replyLineText(event.replyToken, "ยกเลิกรายการชำระเงินแล้ว");
+  await replyLineText(event.replyToken, [
+    "ยกเลิกรายการชำระเงินให้เรียบร้อยแล้วครับ ✅",
+    "รายการนี้พักก่อน",
+  ].join("\n"));
 }
 
 function parseRegistrationNumber(text: string) {
@@ -422,8 +502,12 @@ function isRegistrationText(text: string) {
 async function replyRegisterPrompt(event: LineWebhookEvent) {
   await linkLineRichMenuByName(event.source?.userId, REGISTER_RICH_MENU_NAME);
   await replyLineText(event.replyToken, [
-    "ยังไม่ได้ลงทะเบียนบัญชี LINE กับระบบการเงินห้องเรียน",
-    "กรุณากดเมนูลงทะเบียน แล้วพิมพ์เลขที่ของตัวเอง เช่น ลงทะเบียน 24",
+    "ยังไม่ได้ลงทะเบียน LINE กับระบบการเงินห้องเรียนนะครับ 👀",
+    "กดเมนู ลงทะเบียน แล้วพิมพ์เลขที่ของตัวเองได้เลย",
+    "",
+    "เช่น ลงทะเบียน 24",
+    "",
+    "ลงทะเบียนแป๊บเดียว แล้วค่อยไปจ่ายเงินกันต่อครับ 💸",
   ].join("\n"));
 }
 

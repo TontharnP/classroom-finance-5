@@ -51,11 +51,15 @@ export async function POST(_request: Request, context: RouteContext) {
     );
 
     const notification = await pushLineText(paymentRequest.line_user_id, [
-      "ยืนยันการชำระเงินแล้ว",
+      "ยืนยันการชำระเงินเรียบร้อยแล้วครับ ✅",
+      "ภารกิจจ่ายเงินสำเร็จ",
+      "",
       `รายการ: ${String(schedule.name)}`,
       `ยอดเงิน: ${paymentRequest.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
       `ช่องทาง: ${formatMethod(method)}`,
       "สถานะ: อนุมัติแล้ว",
+      "",
+      "ขอบคุณที่ชำระเงินครับ 🙏",
     ].join("\n"));
 
     return ok({

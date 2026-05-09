@@ -112,12 +112,16 @@ function buildReminderMessage({
 }) {
   const dueLine = dueDate ? `ครบกำหนด: ${formatThaiDate(dueDate)}` : "ครบกำหนด: ยังไม่ระบุ";
   return [
-    `แจ้งเตือนการชำระเงิน`,
+    `แจ้งเตือนการชำระเงินครับ 🔔`,
+    "",
     `เรียน ${studentName}`,
+    "",
     `รายการ: ${scheduleName}`,
     `ยอดค้างชำระ: ${remaining.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
     dueLine,
-    `กรุณาชำระเงินตามกำหนด ขอบคุณครับ/ค่ะ`,
+    "",
+    `อย่าลืมชำระเงินตามกำหนดนะครับ`,
+    `ขอบคุณครับ/ค่ะ 🙏`,
   ].join("\n");
 }
 
