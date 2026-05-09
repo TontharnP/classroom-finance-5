@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
-import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText } from "lucide-react";
+import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, BadgeCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, differenceInDays } from "date-fns";
 import { useAppStore } from "@/lib/store";
@@ -86,6 +86,8 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
     ? differenceInDays(new Date(schedule.endDate), new Date())
     : null;
   const pendingRequests = lineRequests.filter((request) => ["pending_review", "cash_pending"].includes(request.status));
+  const pendingSlipRequests = pendingRequests.filter((request) => request.status === "pending_review");
+  const pendingCashRequests = pendingRequests.filter((request) => request.status === "cash_pending");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -163,7 +165,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
     try {
       await updateLinePaymentRequest(requestId, { status: "rejected", note: "Rejected by treasurer" });
       setLineRequests((requests) => requests.filter((request) => request.id !== requestId));
-      toast.success("ปฏิเสธรายการแล้ว");
+      toast.success("ปฏิเสธรายการแล้ว และแจ้งนักเรียนผ่าน LINE แล้ว");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "ปฏิเสธไม่สำเร็จ");
     } finally {
@@ -322,46 +324,87 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
 
               {pendingRequests.length > 0 && (
                 <div className="border-b px-4 py-4 sm:px-6" style={{ borderColor: "var(--line)" }}>
-                  <div className="mb-3 flex items-center gap-2">
-                    <ReceiptText className="h-4 w-4 text-blue-600" />
-                    <h3 className="font-medium">รายการจาก LINE รอตรวจสอบ ({pendingRequests.length})</h3>
+                  <div className="rounded-3xl border border-blue-200/80 bg-blue-50/80 p-3 shadow-sm dark:border-blue-500/35 dark:bg-blue-950/20 sm:p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                          <ReceiptText className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold">กล่องตรวจรายการจาก LINE</h3>
+                            <span className="rounded-full bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white">
+                              {pendingRequests.length} รอตรวจ
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+                            เปิดสลิป ตรวจยอด แล้วอนุมัติหรือปฏิเสธได้จากตรงนี้
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:min-w-56">
+                        <div className="rounded-2xl border border-white/70 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400">รอตรวจสลิป</div>
+                          <div className="mt-1 text-lg font-bold text-blue-600 dark:text-blue-300">{pendingSlipRequests.length}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/70 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400">รอเงินสด</div>
+                          <div className="mt-1 text-lg font-bold text-amber-600 dark:text-amber-300">{pendingCashRequests.length}</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
+
+                  <div className="mt-3 space-y-2">
                     {pendingRequests.map((request) => {
                       const student = data.students.find((item) => item.id === request.studentId);
+                      const methodLabel = request.method === "cash" ? "เงินสด" : request.method === "truemoney" ? "TrueMoney" : "K PLUS";
+                      const isCash = request.status === "cash_pending";
                       return (
-                        <div key={request.id} className="rounded-2xl border p-3" style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}>
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0">
-                              <div className="font-semibold">
-                                {student ? `${student.prefix} ${student.firstName} ${student.lastName}` : "ไม่พบนักเรียน"}
+                        <div key={request.id} className="rounded-3xl border p-3 shadow-sm sm:p-4" style={{ borderColor: "var(--line)", background: "var(--panel-solid)" }}>
+                          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                            <div className="flex min-w-0 gap-3">
+                              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${isCash ? "bg-amber-100 text-amber-700 dark:bg-amber-950/35 dark:text-amber-300" : "bg-blue-100 text-blue-700 dark:bg-blue-950/35 dark:text-blue-300"}`}>
+                                {isCash ? <Wallet className="h-5 w-5" /> : <ReceiptText className="h-5 w-5" />}
                               </div>
-                              <div className="text-sm text-muted">
-                                {request.method === "cash" ? "เงินสด" : request.method === "truemoney" ? "TrueMoney" : "K PLUS"} • {request.amount.toLocaleString()} ฿
-                                <span className="mx-1">•</span>
-                                {request.status === "cash_pending" ? "รอรับเงินสด" : "รอตรวจสลิป"}
+                              <div className="min-w-0">
+                                <div className="truncate font-semibold" title={student ? `${student.prefix} ${student.firstName} ${student.lastName}` : "ไม่พบนักเรียน"}>
+                                  {student ? `${student.prefix} ${student.firstName} ${student.lastName}` : "ไม่พบนักเรียน"}
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+                                  {student && <span>เลขที่ {student.number}</span>}
+                                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{methodLabel}</span>
+                                  <span className="font-semibold text-blue-600 dark:text-blue-300">{request.amount.toLocaleString()} ฿</span>
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${isCash ? "bg-amber-100 text-amber-700 dark:bg-amber-950/35 dark:text-amber-300" : "bg-blue-100 text-blue-700 dark:bg-blue-950/35 dark:text-blue-300"}`}>
+                                    {isCash ? "รอรับเงินสด" : "รอตรวจสลิป"}
+                                  </span>
+                                </div>
+                                {request.slipUrl && (
+                                  <a href={request.slipUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/35 dark:bg-blue-950/30 dark:text-blue-300">
+                                    <ExternalLink className="h-4 w-4" />
+                                    เปิดดูสลิป
+                                  </a>
+                                )}
                               </div>
-                              {request.slipUrl && (
-                                <a href={request.slipUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-sm font-medium text-blue-600 hover:underline">
-                                  เปิดดูสลิป
-                                </a>
-                              )}
                             </div>
-                            <div className="grid grid-cols-2 gap-2 sm:flex">
+
+                            <div className="grid grid-cols-2 gap-2 lg:min-w-64">
                               <button
                                 type="button"
                                 onClick={() => handleRejectRequest(request.id)}
                                 disabled={reviewingRequestId !== null}
-                                className="apple-ghost-button justify-center px-3 py-2 text-sm disabled:opacity-45"
+                                className="rounded-2xl border border-rose-200 bg-white px-3 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-45 dark:border-rose-500/35 dark:bg-white/5 dark:text-rose-300 dark:hover:bg-rose-950/25"
                               >
-                                ปฏิเสธ
+                                ไม่อนุมัติ
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleApproveRequest(request.id)}
                                 disabled={reviewingRequestId !== null}
-                                className="apple-button justify-center px-3 py-2 text-sm disabled:opacity-45"
+                                className="apple-button justify-center px-3 py-3 text-sm disabled:opacity-45"
                               >
+                                <BadgeCheck className="h-4 w-4" />
                                 อนุมัติ
                               </button>
                             </div>
