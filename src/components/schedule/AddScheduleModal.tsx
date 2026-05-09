@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Modal } from "@/components/ui/Modal";
 import { useAppStore } from "@/lib/store";
-import { createSchedule } from "@/lib/supabase/schedules";
+import { createSchedule, sendScheduleLineAnnouncement } from "@/lib/supabase/schedules";
 import { dbScheduleToSchedule } from "@/lib/supabase/adapter";
 import { getFolderPath, getFolderTreeOrder } from "@/lib/schedules/grouping";
 import toast from "react-hot-toast";
@@ -30,6 +30,7 @@ export function AddScheduleModal({ isOpen, onClose }: Props) {
   const data = useAppStore((state) => state.data);
   const addSchedule = useAppStore((state) => state.addSchedule);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [notifyOnCreate, setNotifyOnCreate] = useState(true);
   const folderOptions = getFolderTreeOrder(data.scheduleFolders);
 
   const {
@@ -72,9 +73,28 @@ export function AddScheduleModal({ isOpen, onClose }: Props) {
       // Map to UI and update local store for immediate UI
       const ui = dbScheduleToSchedule(created);
       addSchedule(ui);
-      toast.success("สร้างกำหนดการเรียบร้อย");
+      if (notifyOnCreate) {
+        try {
+          const result = await sendScheduleLineAnnouncement(created.id);
+          if (result.sent > 0) {
+            toast.success(`สร้างกำหนดการและแจ้ง LINE แล้ว ${result.sent} คน${result.skippedMissingLineId ? ` • ไม่มี LINE ID ${result.skippedMissingLineId} คน` : ""}`);
+          } else if (result.skippedMissingLineId > 0) {
+            toast.success("สร้างกำหนดการแล้ว แต่ยังไม่มีนักเรียนที่มี LINE User ID");
+          } else {
+            toast.success("สร้างกำหนดการเรียบร้อย");
+          }
+          if (result.failed > 0) {
+            toast.error(`แจ้ง LINE ไม่สำเร็จ ${result.failed} คน`);
+          }
+        } catch (error) {
+          toast.error(error instanceof Error ? `สร้างแล้ว แต่แจ้ง LINE ไม่สำเร็จ: ${error.message}` : "สร้างแล้ว แต่แจ้ง LINE ไม่สำเร็จ");
+        }
+      } else {
+        toast.success("สร้างกำหนดการเรียบร้อย");
+      }
       reset();
       setSelectedStudents([]);
+      setNotifyOnCreate(true);
       onClose();
     } catch (e) {
       console.error(e);
@@ -145,6 +165,19 @@ export function AddScheduleModal({ isOpen, onClose }: Props) {
             placeholder="คำอธิบายเพิ่มเติม..."
           />
         </div>
+
+        <label className="flex items-start gap-3 rounded-2xl border p-3 text-sm" style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}>
+          <input
+            type="checkbox"
+            checked={notifyOnCreate}
+            onChange={(event) => setNotifyOnCreate(event.target.checked)}
+            className="mt-1 rounded"
+          />
+          <span>
+            <span className="block font-medium">แจ้งกำหนดการใหม่ผ่าน LINE หลังสร้าง</span>
+            <span className="mt-0.5 block text-xs text-muted">ส่ง Flex card แจ้งว่ามีกำหนดการใหม่ ไม่ใช่การเตือนค้างชำระ</span>
+          </span>
+        </label>
 
         <div>
           <div className="mb-2 flex items-center justify-between">

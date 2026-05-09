@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
-import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, BadgeCheck } from "lucide-react";
+import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, BadgeCheck, Megaphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, differenceInDays } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { deleteSchedule as deleteScheduleRemote } from "@/lib/supabase/schedules";
-import { sendScheduleLineReminders } from "@/lib/supabase/schedules";
+import { sendScheduleLineAnnouncement, sendScheduleLineReminders } from "@/lib/supabase/schedules";
 import { approveLinePaymentRequest, getLinePaymentRequests, updateLinePaymentRequest } from "@/lib/supabase/linePaymentRequests";
 import { dbTransactionToTransaction, dbLinePaymentRequestToLinePaymentRequest } from "@/lib/supabase/adapter";
 import type { LinePaymentRequest, Schedule } from "@/types";
@@ -30,6 +30,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
   const [quickPayStudent, setQuickPayStudent] = useState<{ scheduleId: string; studentId: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">(initialStatusFilter || "all");
   const [sendingReminder, setSendingReminder] = useState<"all" | string | null>(null);
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
   const [lineRequests, setLineRequests] = useState<LinePaymentRequest[]>([]);
   const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
 
@@ -146,6 +147,27 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
     }
   };
 
+  const handleSendAnnouncement = async () => {
+    setSendingAnnouncement(true);
+    try {
+      const result = await sendScheduleLineAnnouncement(schedule.id);
+      if (result.sent > 0) {
+        toast.success(`แจ้งกำหนดการแล้ว ${result.sent} คน${result.skippedMissingLineId ? ` • ไม่มี LINE ID ${result.skippedMissingLineId} คน` : ""}`);
+      } else if (result.skippedMissingLineId > 0) {
+        toast.error("ยังส่งไม่ได้: นักเรียนในกำหนดการยังไม่มี LINE User ID");
+      } else {
+        toast.error("ส่งแจ้งกำหนดการไม่สำเร็จ");
+      }
+      if (result.failed > 0) {
+        toast.error(`ส่งไม่สำเร็จ ${result.failed} คน ตรวจสอบ LINE User ID หรือ Channel token`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ส่งแจ้งกำหนดการไม่สำเร็จ");
+    } finally {
+      setSendingAnnouncement(false);
+    }
+  };
+
   const handleApproveRequest = async (requestId: string) => {
     setReviewingRequestId(requestId);
     try {
@@ -233,6 +255,15 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                   {/* Action buttons */}
                   <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                     <button
+                      onClick={handleSendAnnouncement}
+                      disabled={sendingAnnouncement || scheduleStudents.length === 0}
+                      className="apple-icon-button h-9 w-9 rounded-xl disabled:opacity-45"
+                      aria-label="แจ้งกำหนดการใหม่ผ่าน LINE"
+                      title="แจ้งกำหนดการใหม่ผ่าน LINE"
+                    >
+                      <Megaphone className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                    </button>
+                    <button
                       onClick={() => handleSendReminder(unpaidStudentsWithLine.map((student) => student.id))}
                       disabled={unpaidStudentsWithLine.length === 0 || sendingReminder !== null}
                       className="apple-icon-button h-9 w-9 rounded-xl disabled:opacity-45"
@@ -302,14 +333,23 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-col gap-2 rounded-2xl border p-3 text-sm sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}>
+                <div className="mt-3 grid gap-2 rounded-2xl border p-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center" style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}>
                   <div className="min-w-0">
-                    <div className="font-semibold">แจ้งเตือนผ่าน LINE</div>
+                    <div className="font-semibold">LINE สำหรับกำหนดการนี้</div>
                     <div className="text-xs text-muted">
-                      พร้อมส่ง {unpaidStudentsWithLine.length} คน
-                      {missingLineCount > 0 ? ` • ไม่มี LINE User ID ${missingLineCount} คน` : ""}
+                      แจ้งกำหนดการให้ทุกคน หรือเตือนเฉพาะคนค้างชำระ
+                      {missingLineCount > 0 ? ` • คนค้างที่ไม่มี LINE ID ${missingLineCount} คน` : ""}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleSendAnnouncement}
+                    disabled={sendingAnnouncement || scheduleStudents.length === 0}
+                    className="apple-ghost-button justify-center px-3 py-2 text-sm disabled:opacity-45"
+                  >
+                    <Megaphone className="h-4 w-4" />
+                    {sendingAnnouncement ? "กำลังแจ้ง..." : "แจ้งกำหนดการ"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleSendReminder(unpaidStudentsWithLine.map((student) => student.id))}
@@ -317,7 +357,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                     className="apple-button justify-center px-3 py-2 text-sm disabled:opacity-45"
                   >
                     <Bell className="h-4 w-4" />
-                    {sendingReminder === "all" ? "กำลังส่ง..." : "ส่งแจ้งเตือน"}
+                    {sendingReminder === "all" ? "กำลังเตือน..." : "เตือนชำระเงิน"}
                   </button>
                 </div>
               </div>

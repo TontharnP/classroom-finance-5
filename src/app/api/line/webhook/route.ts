@@ -230,35 +230,33 @@ async function showPayMenu(event: LineWebhookEvent) {
 
   const debts = await getUnpaidSchedulesForStudent(student.id);
   if (debts.length === 0) {
-    await replyLineText(event.replyToken, [
-      "ตอนนี้ไม่มีรายการค้างชำระครับ ✅",
-      "กระเป๋าสตางค์รอดแล้ววันนี้ 😆",
-    ].join("\n"));
+    await replyLineMessages(event.replyToken, [
+      createFlexMessage("ตอนนี้ไม่มีรายการค้างชำระ", createPayMenuBubble(student, debts)),
+    ]);
     return;
   }
 
+  const message = createFlexMessage(
+    `มีรายการค้างชำระ ${debts.length} รายการ`,
+    createPayMenuBubble(student, debts)
+  );
+  message.quickReply = {
+    items: [
+      ...debts.slice(0, 12).map(({ schedule, remaining }) => ({
+        type: "action",
+        action: {
+          type: "postback",
+          label: truncateLabel(`${schedule.name} ${remaining.toLocaleString()}฿`, 20),
+          data: `pay:schedule:${schedule.id}`,
+          displayText: `ชำระ ${schedule.name}`,
+        },
+      })),
+      quickMessage("ยกเลิก", "ยกเลิก"),
+    ],
+  };
+
   await replyLineMessages(event.replyToken, [
-    {
-      type: "text",
-      text: [
-        "มีรายการที่ต้องชำระอยู่ครับ 💸",
-        "เลือกรายการที่ต้องการจ่ายได้เลย",
-      ].join("\n"),
-      quickReply: {
-        items: [
-          ...debts.slice(0, 12).map(({ schedule, remaining }) => ({
-            type: "action",
-            action: {
-              type: "postback",
-              label: truncateLabel(`${schedule.name} ${remaining.toLocaleString()}฿`, 20),
-              data: `pay:schedule:${schedule.id}`,
-              displayText: `ชำระ ${schedule.name}`,
-            },
-          })),
-          quickMessage("ยกเลิก", "ยกเลิก"),
-        ],
-      },
-    },
+    message,
   ]);
 }
 
@@ -305,25 +303,64 @@ async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: stri
     status: "selecting",
   });
 
+  const message = createFlexMessage(
+    `เลือกวิธีชำระเงิน ${debt.schedule.name}`,
+    createPaymentMethodBubble(debt.schedule.name, debt.remaining)
+  );
+  message.quickReply = {
+    items: [
+      quickPostback("K PLUS", `pay:method:${request.id}:kplus`),
+      quickPostback("TrueMoney", `pay:method:${request.id}:truemoney`),
+      quickPostback("เงินสด", `pay:method:${request.id}:cash`),
+      quickMessage("ยกเลิก", "ยกเลิก"),
+    ],
+  };
+
   await replyLineMessages(event.replyToken, [
+    message,
+  ]);
+}
+
+function createPayMenuBubble(
+  student: ReturnType<typeof mapStudent>,
+  debts: Awaited<ReturnType<typeof getUnpaidSchedulesForStudent>>
+) {
+  const totalDebt = debts.reduce((sum, debt) => sum + debt.remaining, 0);
+  const bodyContents: LineFlexBox[] = [
+    flexHeader("ชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`),
+    flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
+    flexSeparator(),
     {
-      type: "text",
-      text: [
-        `รายการ: ${debt.schedule.name}`,
-        `ยอดค้าง: ${debt.remaining.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-        "",
-        "เลือกวิธีชำระเงินได้เลยครับ",
-        "จะโอน จะวอลเล็ต หรือจะเงินสดก็จัดไป 😎",
-      ].join("\n"),
-      quickReply: {
-        items: [
-          quickPostback("K PLUS", `pay:method:${request.id}:kplus`),
-          quickPostback("TrueMoney", `pay:method:${request.id}:truemoney`),
-          quickPostback("เงินสด", `pay:method:${request.id}:cash`),
-          quickMessage("ยกเลิก", "ยกเลิก"),
-        ],
-      },
+      type: "box",
+      layout: "horizontal",
+      spacing: "sm",
+      contents: [
+        metricBox("ยอดค้างรวม", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
+        metricBox("รายการค้าง", `${debts.length} รายการ`, "#2563EB", "#EFF6FF"),
+      ],
     },
+  ];
+
+  if (debts.length === 0) {
+    bodyContents.push(emptyStateBox("ตอนนี้ไม่มีรายการค้างชำระครับ ✅", "กระเป๋าสตางค์รอดแล้ววันนี้"));
+  } else {
+    bodyContents.push(flexSectionTitle("เลือกรายการจากปุ่มด้านล่าง"));
+    bodyContents.push(...debts.slice(0, 8).map((debt) => paymentStatusRow(debt.schedule.name, debt.remaining, debt.schedule.end_date || debt.schedule.start_date, "#DC2626")));
+    if (debts.length > 8) {
+      bodyContents.push(flexText(`และอีก ${debts.length - 8} รายการ`, "#6B7280", "xs"));
+    }
+  }
+
+  return flexBubble(bodyContents);
+}
+
+function createPaymentMethodBubble(scheduleName: string, amount: number) {
+  return flexBubble([
+    flexHeader("เลือกวิธีชำระเงิน", scheduleName),
+    flexSeparator(),
+    metricBox("ยอดค้าง", formatBaht(amount), "#2563EB", "#EFF6FF", "xxl"),
+    flexText("เลือก K PLUS, TrueMoney หรือเงินสดจากปุ่มด้านล่างได้เลยครับ", "#374151", "sm"),
+    flexText("ถ้าเลือกโอนหรือวอลเล็ต ระบบจะส่ง QR พร้อมยอดเงินคงที่ให้สแกน", "#6B7280", "xs"),
   ]);
 }
 
@@ -359,15 +396,9 @@ async function handleMethodSelection(event: LineWebhookEvent, requestId: string,
 
   if (method === "cash") {
     await updateRecord<Row>("line_payment_requests", request.id, { method, status: "cash_pending" }, ["method", "status"]);
-    await replyLineText(event.replyToken, [
-      "รับเรื่องชำระเงินสดไว้แล้วครับ 💵",
-      "สายเงินสดมาเอง",
-      "",
-      `ยอดเงิน: ${request.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-      "",
-      "นำเงินไปชำระกับเหรัญญิกได้เลยครับ",
-      "ระบบจะบันทึกยอดให้หลังจากเหรัญญิกยืนยันนะครับ",
-    ].join("\n"));
+    await replyLineMessages(event.replyToken, [
+      createFlexMessage("รับเรื่องชำระเงินสดไว้แล้ว", createCashPaymentBubble(request.amount)),
+    ]);
     return;
   }
 
@@ -376,22 +407,32 @@ async function handleMethodSelection(event: LineWebhookEvent, requestId: string,
   const qrUrl = `https://quickchart.io/qr?size=600&margin=2&text=${encodeURIComponent(payload)}`;
 
   await replyLineMessages(event.replyToken, [
-    {
-      type: "text",
-      text: [
-        method === "kplus" ? "สแกนจ่ายผ่าน K PLUS ได้เลยครับ 🟢" : "สแกนจ่ายผ่าน TrueMoney ได้เลยครับ 🧡",
-        "",
-        `ยอดเงิน: ${request.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-        "",
-        "จ่ายเสร็จแล้ว ส่งรูปสลิปกลับมาในแชทนี้ได้เลยครับ 📸",
-        "บอทรอสลิปอยู่น้า",
-      ].join("\n"),
-    },
+    createFlexMessage(`สแกนจ่าย ${formatMethod(method)}`, createQrPaymentBubble(method, request.amount)),
     {
       type: "image",
       originalContentUrl: qrUrl,
       previewImageUrl: qrUrl,
     },
+  ]);
+}
+
+function createCashPaymentBubble(amount: number) {
+  return flexBubble([
+    flexHeader("รับเรื่องชำระเงินสดแล้ว", "นำเงินไปชำระกับเหรัญญิก"),
+    flexSeparator(),
+    metricBox("ยอดเงิน", formatBaht(amount), "#2563EB", "#EFF6FF", "xxl"),
+    flexText("ระบบจะบันทึกยอดให้หลังจากเหรัญญิกยืนยันในระบบนะครับ 💵", "#374151", "sm"),
+  ]);
+}
+
+function createQrPaymentBubble(method: string, amount: number) {
+  const isKplus = method === "kplus";
+  return flexBubble([
+    flexHeader(isKplus ? "สแกนจ่ายผ่าน K PLUS" : "สแกนจ่ายผ่าน TrueMoney", "QR ด้านล่างล็อกยอดเงินไว้แล้ว"),
+    flexSeparator(),
+    metricBox("ยอดเงิน", formatBaht(amount), isKplus ? "#059669" : "#EA580C", isKplus ? "#ECFDF5" : "#FFF7ED", "xxl"),
+    flexText("จ่ายเสร็จแล้ว ส่งรูปสลิปกลับมาในแชทนี้ได้เลยครับ 📸", "#374151", "sm"),
+    flexText("บอทรอสลิปอยู่น้า", "#6B7280", "xs"),
   ]);
 }
 

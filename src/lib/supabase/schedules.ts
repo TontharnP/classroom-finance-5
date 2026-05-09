@@ -40,6 +40,7 @@ export async function deleteSchedule(id: string): Promise<void> {
 
 export type LineReminderResult = {
   scheduleId: string;
+  kind: "announcement" | "reminder";
   sent: number;
   skippedMissingLineId: number;
   alreadyPaid: number;
@@ -55,12 +56,20 @@ export type LineReminderResult = {
 
 export async function sendScheduleLineReminders(
   scheduleId: string,
-  studentIds?: string[]
+  studentIds?: string[],
+  kind: "announcement" | "reminder" = "reminder"
 ): Promise<LineReminderResult> {
   return apiRequest<LineReminderResult>(`/api/schedules/${scheduleId}/reminders/line`, {
     method: "POST",
-    body: JSON.stringify({ studentIds }),
+    body: JSON.stringify({ studentIds, kind }),
   });
+}
+
+export async function sendScheduleLineAnnouncement(
+  scheduleId: string,
+  studentIds?: string[]
+): Promise<LineReminderResult> {
+  return sendScheduleLineReminders(scheduleId, studentIds, "announcement");
 }
 
 export async function getStudentsPaidForSchedule(scheduleId: string): Promise<string[]> {
