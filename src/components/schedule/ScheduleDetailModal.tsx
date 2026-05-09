@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, BadgeCheck, Megaphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, differenceInDays } from "date-fns";
@@ -89,6 +90,15 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
   const pendingRequests = lineRequests.filter((request) => ["pending_review", "cash_pending"].includes(request.status));
   const pendingSlipRequests = pendingRequests.filter((request) => request.status === "pending_review");
   const pendingCashRequests = pendingRequests.filter((request) => request.status === "cash_pending");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -195,7 +205,10 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
     }
   };
 
-  return (
+  const portalTarget = typeof document === "undefined" ? null : document.body;
+  if (!portalTarget) return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -205,17 +218,19 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-50 bg-black/65 backdrop-blur-2xl"
+            className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-2xl"
+            style={{ backdropFilter: "blur(16px) saturate(1.05)", WebkitBackdropFilter: "blur(16px) saturate(1.05)" }}
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden p-3 sm:p-4">
+          <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden p-2 sm:p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative flex h-[min(820px,calc(100dvh-1.5rem))] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border bg-white shadow-2xl dark:bg-zinc-950"
-              style={{ borderColor: "var(--line)" }}
+              transition={{ type: "spring", duration: 0.42, bounce: 0.14 }}
+              className="apple-panel relative flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden sm:max-h-[min(760px,calc(100dvh-2rem))]"
+              onClick={(event) => event.stopPropagation()}
             >
               {/* Header */}
               <div
@@ -228,7 +243,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-lg font-semibold sm:text-xl" title={schedule.name}>{schedule.name}</h2>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-600 dark:text-zinc-400 sm:mt-2 sm:gap-x-3 sm:gap-y-1 sm:text-sm">
                       <span>เริ่ม: {format(new Date(schedule.startDate), "dd/MM/yyyy")}</span>
                       {schedule.endDate && (
                         <>
@@ -253,7 +268,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                  <div className="grid shrink-0 grid-cols-3 gap-1 sm:flex sm:items-center sm:gap-2">
                     <button
                       onClick={handleSendAnnouncement}
                       disabled={sendingAnnouncement || scheduleStudents.length === 0}
@@ -297,44 +312,45 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                 </div>
               </div>
 
+              <div className="student-card-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
               {/* Summary Cards */}
-              <div className="shrink-0 border-b px-4 py-3 sm:px-6 sm:py-4" style={{ borderColor: "var(--line)", background: "var(--panel-solid)" }}>
-                <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">
-                  <div className="rounded-2xl border border-blue-200/70 bg-blue-50/90 p-3 dark:border-blue-500/35 dark:bg-blue-950/35">
-                    <div className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+              <div className="border-b px-4 py-3 sm:px-6 sm:py-4" style={{ borderColor: "var(--line)" }}>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  <div className="rounded-2xl border border-blue-300 bg-gradient-to-br from-blue-50 to-sky-100 p-2 shadow-sm dark:border-blue-500/45 dark:from-blue-950/70 dark:to-sky-950/50 sm:p-3">
+                    <div className="text-[11px] font-semibold text-blue-900 dark:text-blue-100 sm:text-xs">
                       จำนวนต่อรายการ
                     </div>
-                    <div className="mt-1 text-xl font-bold text-blue-600 dark:text-blue-300 sm:text-2xl">
+                    <div className="mt-1 text-lg font-bold text-blue-700 dark:text-blue-200 sm:text-2xl">
                       {schedule.amountPerItem.toLocaleString()} ฿
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/90 p-3 dark:border-emerald-500/35 dark:bg-emerald-950/35">
-                    <div className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                  <div className="rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 to-green-100 p-2 shadow-sm dark:border-emerald-500/45 dark:from-emerald-950/70 dark:to-green-950/50 sm:p-3">
+                    <div className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-100 sm:text-xs">
                       เก็บได้
                     </div>
-                    <div className="mt-1 text-xl font-bold text-emerald-600 dark:text-emerald-300 sm:text-2xl">
+                    <div className="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-200 sm:text-2xl">
                       {totalCollected.toLocaleString()} ฿
                     </div>
-                    <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    <div className="mt-1 text-[11px] font-medium text-emerald-800 dark:text-emerald-100/80 sm:text-xs">
                       {paidCount}/{totalStudents} คน
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-rose-200/70 bg-rose-50/90 p-3 dark:border-rose-500/35 dark:bg-rose-950/25">
-                    <div className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                  <div className="rounded-2xl border border-rose-300 bg-gradient-to-br from-rose-50 to-red-100 p-2 shadow-sm dark:border-rose-500/45 dark:from-rose-950/70 dark:to-red-950/50 sm:p-3">
+                    <div className="text-[11px] font-semibold text-rose-900 dark:text-rose-100 sm:text-xs">
                       ยอดค้าง
                     </div>
-                    <div className="mt-1 text-xl font-bold text-rose-600 dark:text-rose-300 sm:text-2xl">
+                    <div className="mt-1 text-lg font-bold text-rose-700 dark:text-rose-200 sm:text-2xl">
                       {totalRemaining.toLocaleString()} ฿
                     </div>
-                    <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    <div className="mt-1 text-[11px] font-medium text-rose-800 dark:text-rose-100/80 sm:text-xs">
                       {unpaidCount} คนค้าง
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-2 rounded-2xl border p-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center" style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}>
-                  <div className="min-w-0">
+                <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border p-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center" style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}>
+                  <div className="col-span-2 min-w-0 md:col-span-1">
                     <div className="font-semibold">LINE สำหรับกำหนดการนี้</div>
                     <div className="text-xs text-muted">
                       แจ้งกำหนดการให้ทุกคน หรือเตือนเฉพาะคนค้างชำระ
@@ -457,31 +473,34 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
               )}
 
               {/* Student List */}
-              <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-6">
+              <div className="px-4 py-3 sm:px-6 sm:py-4">
                 <div className="mb-3 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="font-semibold">
                     รายชื่อนักเรียน ({filteredStudents.length}/{scheduleStudents.length} คน)
                   </h3>
                   <div className="grid grid-cols-3 gap-1 rounded-full bg-zinc-100 p-1 dark:bg-zinc-900">
                     {[
-                      { key: "all", label: "ทั้งหมด" },
-                      { key: "paid", label: "ชำระแล้ว" },
-                      { key: "unpaid", label: "ค้างชำระ" },
+                      { key: "all", label: "ทั้งหมด", count: totalStudents, tone: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-200" },
+                      { key: "paid", label: "ชำระแล้ว", count: paidCount, tone: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200" },
+                      { key: "unpaid", label: "ค้างชำระ", count: unpaidCount, tone: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200" },
                     ].map((tab) => (
                       <button
                         key={tab.key}
                         onClick={() => setStatusFilter(tab.key as typeof statusFilter)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${statusFilter === tab.key
+                        className={`flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold transition-colors sm:px-3 ${statusFilter === tab.key
                             ? "bg-blue-600 text-white"
-                            : "text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            : "text-zinc-700 hover:bg-white dark:text-zinc-300 dark:hover:bg-zinc-800"
                           }`}
                       >
-                        {tab.label}
+                        <span className="truncate">{tab.label}</span>
+                        <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${statusFilter === tab.key ? "bg-white/22 text-white" : tab.tone}`}>
+                          {tab.count}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pb-4 pr-1">
+                <div className="space-y-2 pb-[calc(5rem+env(safe-area-inset-bottom))] pr-1 sm:pb-4">
                   {filteredStudents.length === 0 ? (
                     <div className="py-12 text-center text-zinc-500">
                       {statusFilter === "all" ? "ไม่มีนักเรียนในกำหนดการนี้" : statusFilter === "paid" ? "ยังไม่มีนักเรียนที่ชำระแล้ว" : "ไม่มีนักเรียนค้างชำระ"}
@@ -503,9 +522,9 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                               setQuickPayStudent({ scheduleId: schedule.id, studentId: student.id });
                             }
                           }}
-                          className={`flex flex-col gap-3 rounded-2xl border p-3 transition-colors sm:flex-row sm:items-center sm:justify-between ${!hasPaid ? "cursor-pointer hover:bg-blue-50/80 dark:hover:bg-blue-950/20" : ""
+                          className={`flex flex-col gap-3 rounded-2xl border p-3 transition-colors sm:flex-row sm:items-center sm:justify-between ${!hasPaid ? "cursor-pointer hover:border-blue-300 dark:hover:border-blue-500/45" : ""
                             }`}
-                          style={{ borderColor: "var(--line)" }}
+                          style={{ borderColor: "var(--line)", background: "var(--panel-soft)" }}
                         >
                           <div className="flex min-w-0 items-center gap-3">
                             <div
@@ -568,6 +587,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                   )}
                 </div>
               </div>
+              </div>
             </motion.div>
           </div>
 
@@ -600,6 +620,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
           )}
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    portalTarget
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -35,17 +36,21 @@ export function Modal({ isOpen, onClose, title, children, size = "md" }: ModalPr
     xl: "max-w-4xl",
   };
 
-  return (
+  const portalTarget = typeof document === "undefined" ? null : document.body;
+  if (!portalTarget) return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center p-2 sm:p-4">
+        <div className="fixed inset-0 z-[120] grid place-items-center p-2 sm:p-4">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 z-0 bg-black/35 backdrop-blur-2xl"
+            className="absolute inset-0 z-0 bg-black/45 backdrop-blur-xl"
+            style={{ backdropFilter: "blur(18px) saturate(1.1)", WebkitBackdropFilter: "blur(18px) saturate(1.1)" }}
           />
 
           {/* Modal Content */}
@@ -82,6 +87,7 @@ export function Modal({ isOpen, onClose, title, children, size = "md" }: ModalPr
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    portalTarget
   );
 }

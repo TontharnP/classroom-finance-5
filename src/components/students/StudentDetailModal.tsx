@@ -271,26 +271,26 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
               {/* Payment Summary */}
               <div className="border-b px-4 py-4 sm:px-6" style={{ borderColor: "var(--line)" }}>
                 <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-                  <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: "rgba(16, 166, 106, 0.28)", background: "linear-gradient(180deg, #ecfdf5, #f7fffb)" }}>
-                    <div className="text-sm font-semibold text-emerald-900">
+                  <div className="rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 to-green-100 p-4 shadow-sm dark:border-emerald-500/45 dark:from-emerald-950/70 dark:to-green-950/50">
+                    <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                       ยอดเงินที่ชำระ
                     </div>
-                    <div className="mt-1 text-2xl font-bold text-emerald-600">
+                    <div className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-200">
                       {totalPaid.toLocaleString()} ฿
                     </div>
-                    <div className="mt-1 text-xs font-medium text-emerald-800/80">
+                    <div className="mt-1 text-xs font-medium text-emerald-800 dark:text-emerald-100/80">
                       {paidTransactions.length} รายการ
                     </div>
                   </div>
 
-                  <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: "rgba(227, 66, 101, 0.28)", background: "linear-gradient(180deg, #fff1f3, #fff8f9)" }}>
-                    <div className="text-sm font-semibold text-rose-900">
+                  <div className="rounded-2xl border border-rose-300 bg-gradient-to-br from-rose-50 to-red-100 p-4 shadow-sm dark:border-rose-500/45 dark:from-rose-950/70 dark:to-red-950/50">
+                    <div className="text-sm font-semibold text-rose-900 dark:text-rose-100">
                       ยอดเงินที่ค้าง
                     </div>
-                    <div className="mt-1 text-2xl font-bold text-rose-500">
+                    <div className="mt-1 text-2xl font-bold text-rose-700 dark:text-rose-200">
                       {totalUnpaid.toLocaleString()} ฿
                     </div>
-                    <div className="mt-1 text-xs font-medium text-rose-800/80">
+                    <div className="mt-1 text-xs font-medium text-rose-800 dark:text-rose-100/80">
                       {unpaidItems.length} รายการ
                     </div>
                   </div>

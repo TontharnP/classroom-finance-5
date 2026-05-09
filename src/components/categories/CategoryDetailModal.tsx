@@ -1,5 +1,6 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { X, Edit2, Trash2, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -48,6 +49,15 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
     ? data.transactions.find((transaction) => transaction.id === editingTransactionId)
     : null;
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
@@ -73,7 +83,10 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
   const isCustomImage = iconValue.startsWith("http");
   const IconComponent = getIconComponent(iconValue);
 
-  return (
+  const portalTarget = typeof document === "undefined" ? null : document.body;
+  if (!portalTarget) return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -82,14 +95,17 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-black/45 backdrop-blur-2xl"
+            className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-2xl"
+            style={{ backdropFilter: "blur(16px) saturate(1.05)", WebkitBackdropFilter: "blur(16px) saturate(1.05)" }}
           />
-          <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden p-3 sm:p-4">
+          <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden p-2 sm:p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="apple-panel flex max-h-[min(720px,calc(100dvh-1.5rem))] w-full max-w-2xl flex-col overflow-hidden"
+              transition={{ type: "spring", duration: 0.42, bounce: 0.14 }}
+              className="apple-panel flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden sm:max-h-[min(720px,calc(100dvh-2rem))]"
+              onClick={(event) => event.stopPropagation()}
             >
             <div
               className="shrink-0 border-b px-4 py-4 sm:px-6"
@@ -133,7 +149,7 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
             </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+            <div className="student-card-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             {/* Stats */}
             <div className="mb-6 grid grid-cols-2 gap-4">
               <div className="apple-soft rounded-xl p-4">
@@ -241,6 +257,7 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
           )}
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    portalTarget
   );
 }
