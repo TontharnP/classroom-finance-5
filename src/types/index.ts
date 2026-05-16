@@ -5,10 +5,17 @@ export type LinePaymentRequestStatus =
   | "selecting"
   | "awaiting_slip"
   | "pending_review"
+  | "pending_slip_review"
   | "cash_pending"
   | "approved"
   | "rejected"
   | "expired";
+export type SlipStatus =
+  | "pending_slip_review"
+  | "approved"
+  | "rejected"
+  | "duplicate_suspected"
+  | "wrong_amount";
 
 export interface Pocket {
   id: string;
@@ -81,8 +88,17 @@ export interface LinePaymentRequest {
   status: LinePaymentRequestStatus;
   slipUrl?: string;
   slipPathname?: string;
+  slipStatus?: SlipStatus;
+  slipQrPayload?: string;
+  slipImageHash?: string;
+  slipOcrText?: string;
+  slipAutoCheckResult?: string;
   transactionId?: string;
   note?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectReason?: string;
+  paidAt?: string;
   createdAt: string;
   updatedAt: string;
 }

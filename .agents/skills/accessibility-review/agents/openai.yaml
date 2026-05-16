@@ -1,0 +1,6 @@
+interface:
+  display_name: "Accessibility Review"
+  short_description: "Improve UI accessibility"
+  default_prompt: "Use $accessibility-review to audit a Classroom Finance user flow."
+policy:
+  allow_implicit_invocation: true

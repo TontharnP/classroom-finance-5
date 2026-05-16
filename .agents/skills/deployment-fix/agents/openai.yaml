@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deployment Fix"
+  short_description: "Fix build and deploy issues"
+  default_prompt: "Use $deployment-fix to diagnose a Classroom Finance deployment failure."
+policy:
+  allow_implicit_invocation: true

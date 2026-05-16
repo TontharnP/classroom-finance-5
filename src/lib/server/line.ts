@@ -6,6 +6,10 @@ type LineRichMenuSummary = {
 };
 
 export async function pushLineText(lineUserId: string | undefined, text: string) {
+  return pushLineMessages(lineUserId, [{ type: "text", text }]);
+}
+
+export async function pushLineMessages(lineUserId: string | undefined, messages: Record<string, unknown>[]) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token || !lineUserId) return { ok: false, error: "Missing LINE token or user id" };
 
@@ -17,7 +21,7 @@ export async function pushLineText(lineUserId: string | undefined, text: string)
     },
     body: JSON.stringify({
       to: lineUserId,
-      messages: [{ type: "text", text }],
+      messages,
     }),
   });
 

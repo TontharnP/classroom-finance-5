@@ -1,0 +1,6 @@
+interface:
+  display_name: "Docs Writer"
+  short_description: "Write project documentation"
+  default_prompt: "Use $docs-writer to update Classroom Finance setup or user docs."
+policy:
+  allow_implicit_invocation: true

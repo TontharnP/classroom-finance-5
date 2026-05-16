@@ -1,0 +1,6 @@
+interface:
+  display_name: "Database Migration"
+  short_description: "Write Supabase migrations"
+  default_prompt: "Use $database-migration to create a safe Supabase schema change."
+policy:
+  allow_implicit_invocation: true

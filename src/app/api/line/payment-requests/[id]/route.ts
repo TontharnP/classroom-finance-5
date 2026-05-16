@@ -1,4 +1,4 @@
-import { notFound, ok, serverError } from "@/lib/api/response";
+import { badRequest, notFound, ok, serverError } from "@/lib/api/response";
 import { getRecord, updateRecord, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest } from "@/lib/supabase/mappers";
 import { pushLineText } from "@/lib/server/line";
@@ -7,6 +7,15 @@ import type { LinePaymentRequest, LinePaymentRequestUpdate } from "@/types/supab
 type RouteContext = { params: Promise<{ id: string }> };
 
 const requestColumns = ["status", "method", "slip_url", "slip_pathname", "transaction_id", "note"];
+const reviewOnlyFields = new Set([
+  "status",
+  "slip_status",
+  "transaction_id",
+  "reviewed_by",
+  "reviewed_at",
+  "reject_reason",
+  "paid_at",
+]);
 
 function formatPaymentMethod(method: LinePaymentRequest["method"]) {
   if (method === "cash") return "เงินสด";
@@ -49,6 +58,9 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     const body = (await request.json()) as LinePaymentRequestUpdate;
+    if (Object.keys(body).some((key) => reviewOnlyFields.has(key))) {
+      return badRequest("Review decisions must be made from the treasurer LINE account.");
+    }
     const previousRow = await getRecord<Row>("line_payment_requests", id);
     if (!previousRow) return notFound("Line payment request not found");
     const previous = mapLinePaymentRequest(previousRow);

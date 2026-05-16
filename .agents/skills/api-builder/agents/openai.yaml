@@ -1,0 +1,6 @@
+interface:
+  display_name: "API Builder"
+  short_description: "Build app API routes"
+  default_prompt: "Use $api-builder to add or fix a Classroom Finance API route."
+policy:
+  allow_implicit_invocation: true

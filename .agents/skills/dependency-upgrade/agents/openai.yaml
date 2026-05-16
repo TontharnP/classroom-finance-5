@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dependency Upgrade"
+  short_description: "Upgrade npm dependencies"
+  default_prompt: "Use $dependency-upgrade to update a Classroom Finance dependency safely."
+policy:
+  allow_implicit_invocation: true

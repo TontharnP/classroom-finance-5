@@ -1,0 +1,6 @@
+interface:
+  display_name: "Performance Review"
+  short_description: "Find and fix app slowness"
+  default_prompt: "Use $performance-review to diagnose a slow Classroom Finance workflow."
+policy:
+  allow_implicit_invocation: true

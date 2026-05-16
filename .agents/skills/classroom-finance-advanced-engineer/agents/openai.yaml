@@ -1,0 +1,6 @@
+interface:
+  display_name: "Classroom Finance Advanced Engineer"
+  short_description: "Advanced repo delivery skill"
+  default_prompt: "Use $classroom-finance-advanced-engineer to plan and implement a complex Classroom Finance change."
+policy:
+  allow_implicit_invocation: true

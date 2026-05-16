@@ -1,0 +1,6 @@
+interface:
+  display_name: "Classroom Finance Specialist"
+  short_description: "Project-wide expert skill"
+  default_prompt: "Use $classroom-finance-specialist to work on this Classroom Finance repo."
+policy:
+  allow_implicit_invocation: true

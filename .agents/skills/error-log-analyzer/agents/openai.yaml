@@ -1,0 +1,6 @@
+interface:
+  display_name: "Error Log Analyzer"
+  short_description: "Analyze app errors and logs"
+  default_prompt: "Use $error-log-analyzer to find the root cause of a Classroom Finance error."
+policy:
+  allow_implicit_invocation: true

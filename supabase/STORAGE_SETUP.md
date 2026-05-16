@@ -63,3 +63,17 @@ avatars/
 ```
 
 This ensures unique filenames and easy cleanup when deleting students.
+
+## Payment Slip Bucket
+
+LINE payment slips are stored in a private Supabase Storage bucket.
+
+Create the bucket:
+
+- **Name**: `payment-slips`
+- **Public bucket**: unchecked
+- **Allowed MIME types**: `image/jpeg,image/png,image/webp`
+
+The migration `009_add_slip_review_fields.sql` inserts this bucket if it does not already exist. The app reads the bucket name from `SUPABASE_SLIP_BUCKET` and defaults to `payment-slips`.
+
+Slip files are served through the server route `/api/uploads/slips?path=...`, so the Supabase service role key stays server-only.
