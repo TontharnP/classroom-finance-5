@@ -93,6 +93,12 @@ type TlvNode = {
   children: TlvNode[];
 };
 
+type ExpectedReceiverAccount = {
+  raw: string;
+  digits: string;
+  hasMask: boolean;
+};
+
 function parseTlv(input: string, prefix = ""): { nodes: TlvNode[]; complete: boolean } {
   const nodes: TlvNode[] = [];
   let index = 0;
@@ -124,8 +130,12 @@ function flattenTlv(nodes: TlvNode[]): TlvNode[] {
 
 function normalizeExpectedAccounts(accounts: string[] | undefined) {
   return (accounts || [])
-    .map((account) => normalizeDigits(account))
-    .filter((account) => account.length >= 6);
+    .map((account) => ({
+      raw: account.trim(),
+      digits: normalizeDigits(account),
+      hasMask: /x/i.test(account),
+    }))
+    .filter((account) => account.raw.length > 0 && (account.digits.length >= 4 || account.hasMask));
 }
 
 function normalizeDigits(value: string) {
@@ -136,13 +146,16 @@ function removeLeadingZeros(value: string) {
   return value.replace(/^0+/, "");
 }
 
-function containsExpectedAccount(payload: string, expectedAccounts: string[]) {
+function containsExpectedAccount(payload: string, expectedAccounts: ExpectedReceiverAccount[]) {
   const payloadDigits = normalizeDigits(payload);
+  const normalizedPayload = normalizeTextForSearch(payload);
   return expectedAccounts.some((account) => {
-    const withoutLeadingZeros = removeLeadingZeros(account);
+    const withoutLeadingZeros = removeLeadingZeros(account.digits);
+    const normalizedRaw = normalizeTextForSearch(account.raw);
     return (
-      payloadDigits.includes(account) ||
-      (withoutLeadingZeros.length >= 6 && payloadDigits.includes(withoutLeadingZeros))
+      (account.digits.length >= 4 && payloadDigits.includes(account.digits)) ||
+      (withoutLeadingZeros.length >= 4 && payloadDigits.includes(withoutLeadingZeros)) ||
+      (account.hasMask && normalizedRaw.length >= 4 && normalizedPayload.includes(normalizedRaw))
     );
   });
 }
@@ -160,7 +173,7 @@ function normalizeTextForSearch(value: string) {
     .replace(/[\s._\-:|/\\()[\]{}]+/g, "");
 }
 
-function extractSlipTransactionId(payload: string, expectedAccounts: string[], amount: number | undefined) {
+function extractSlipTransactionId(payload: string, expectedAccounts: ExpectedReceiverAccount[], amount: number | undefined) {
   const parsed = parseTlv(payload);
   const nodes = flattenTlv(parsed.nodes);
   const preferredValues = nodes
@@ -178,7 +191,7 @@ function cleanTransactionCandidate(value: string) {
   return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
-function isLikelyTransactionId(candidate: string, expectedAccounts: string[], amount: number | undefined) {
+function isLikelyTransactionId(candidate: string, expectedAccounts: ExpectedReceiverAccount[], amount: number | undefined) {
   if (candidate.length < 10 || candidate.length > 80) return false;
   if (/^A0{3,}/.test(candidate)) return false;
   if (/^0+$/.test(candidate)) return false;
@@ -186,7 +199,8 @@ function isLikelyTransactionId(candidate: string, expectedAccounts: string[], am
   const candidateDigits = normalizeDigits(candidate);
   if (candidateDigits.length >= 6) {
     if (expectedAccounts.some((account) =>
-      candidateDigits.includes(account) || candidateDigits.includes(removeLeadingZeros(account))
+      (account.digits.length >= 4 && candidateDigits.includes(account.digits)) ||
+      (removeLeadingZeros(account.digits).length >= 4 && candidateDigits.includes(removeLeadingZeros(account.digits)))
     )) {
       return false;
     }
