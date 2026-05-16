@@ -684,14 +684,9 @@ async function showStudentStatus(event: LineWebhookEvent) {
     ? `สถานะของคุณ: ค้าง ${formatBaht(totalDebt)} จาก ${overview.debts.length} รายการ`
     : "สถานะของคุณ: ไม่มีรายการค้างชำระ";
 
-  const message = createFlexMessage(altText, createStudentStatusBubble(student, overview));
-  if (overview.debts.length > 0) {
-    message.quickReply = {
-      items: [quickMessage("ชำระเงิน", "ชำระเงิน")],
-    };
-  }
-
-  await replyLineMessages(event.replyToken, [message]);
+  await replyLineMessages(event.replyToken, [
+    createFlexMessage(altText, createStudentStatusBubble(student, overview)),
+  ]);
 }
 
 async function showStudentHistory(event: LineWebhookEvent) {
@@ -840,11 +835,19 @@ function createStudentStatusBubble(student: ReturnType<typeof mapStudent>, overv
   if (overview.debts.length === 0) {
     bodyContents.push(emptyStateBox("ไม่มีรายการค้างชำระครับ ✅", "กระเป๋าสตางค์รอดแล้ววันนี้"));
   } else {
-    bodyContents.push(flexSectionTitle("รายการค้างชำระ"));
-    bodyContents.push(...overview.debts.slice(0, 8).map((debt) => paymentStatusRow(debt.schedule.name, debt.remaining, debt.schedule.end_date || debt.schedule.start_date, "#DC2626")));
+    bodyContents.push(flexSectionTitle("แตะเลือกรายการเพื่อชำระเงิน"));
+    bodyContents.push(...overview.debts.slice(0, 8).map((debt) =>
+      paymentDebtButton(
+        debt.schedule.name,
+        debt.remaining,
+        debt.schedule.end_date || debt.schedule.start_date,
+        `pay:schedule:${debt.schedule.id}`
+      )
+    ));
     if (overview.debts.length > 8) {
       bodyContents.push(flexText(`และอีก ${overview.debts.length - 8} รายการ`, "#6B7280", "xs"));
     }
+    bodyContents.push(flexButton("เปิดเมนูชำระเงิน", { type: "message", label: "ชำระเงิน", text: "ชำระเงิน" }, "primary", "#2563EB"));
   }
 
   return flexBubble(bodyContents);
@@ -957,30 +960,6 @@ function metricBox(label: string, value: string, color: string, backgroundColor:
     contents: [
       { type: "text", text: label, size: "xs", color: "#6B7280", wrap: true },
       { type: "text", text: value, size, weight: "bold", color, wrap: true },
-    ],
-  };
-}
-
-function paymentStatusRow(name: string, amount: number, dueDate: string | undefined, color: string): LineFlexBox {
-  return {
-    type: "box",
-    layout: "horizontal",
-    spacing: "md",
-    paddingAll: "10px",
-    cornerRadius: "14px",
-    borderWidth: "1px",
-    borderColor: "#E5E7EB",
-    contents: [
-      {
-        type: "box",
-        layout: "vertical",
-        flex: 1,
-        contents: [
-          { type: "text", text: name, size: "sm", weight: "bold", color: "#111827", wrap: true },
-          { type: "text", text: `ครบกำหนด: ${formatDateThai(dueDate)}`, size: "xs", color: "#6B7280", wrap: true },
-        ],
-      },
-      { type: "text", text: formatBaht(amount), size: "sm", weight: "bold", color, align: "end", flex: 0 },
     ],
   };
 }
@@ -1166,17 +1145,6 @@ async function getUnpaidSchedulesForStudent(studentId: string) {
     })
     .filter((item) => item.remaining > 0)
     .sort((a, b) => String(a.schedule.end_date || a.schedule.start_date).localeCompare(String(b.schedule.end_date || b.schedule.start_date)));
-}
-
-function quickMessage(label: string, text: string) {
-  return {
-    type: "action",
-    action: {
-      type: "message",
-      label,
-      text,
-    },
-  };
 }
 
 function buildAutoCheckResult({
