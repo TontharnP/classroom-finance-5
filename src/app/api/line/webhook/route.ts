@@ -5,8 +5,7 @@ import { createRecord, listRecords, updateRecord, type Row } from "@/lib/supabas
 import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { storeSlipImage } from "@/lib/server/slipStorage";
-import { approveLinePaymentRequest, rejectLinePaymentRequest } from "@/lib/server/linePaymentReview";
-import { linkLineRichMenuByName, pushLineMessages } from "@/lib/server/line";
+import { linkLineRichMenuByName } from "@/lib/server/line";
 
 const PROMPTPAY_ID = "004666006046829";
 
@@ -141,11 +140,6 @@ async function handleLineEvent(event: LineWebhookEvent) {
     }
   }
 
-  if (isSlipReviewTextCommand(text)) {
-    await handleAction(event, text);
-    return;
-  }
-
   if (isCoreTextCommand(text) || isRegistrationText(text) || text.startsWith("pay:")) {
     await handleAction(event, text);
   }
@@ -154,25 +148,6 @@ async function handleLineEvent(event: LineWebhookEvent) {
 async function handleAction(event: LineWebhookEvent, action: string) {
   if (!event.source?.userId) return;
   const normalized = action.trim();
-
-  if (normalized.startsWith("approve_slip:")) {
-    await handleApproveSlip(event, normalized.replace("approve_slip:", ""));
-    return;
-  }
-  if (normalized.startsWith("reject_slip:")) {
-    await promptSlipRejectReason(event, normalized.replace("reject_slip:", ""));
-    return;
-  }
-  if (/^approve\s+\S+/i.test(normalized)) {
-    await handleApproveSlip(event, normalized.split(/\s+/)[1]);
-    return;
-  }
-  if (/^reject\s+\S+/i.test(normalized)) {
-    const [, requestId, ...reasonParts] = normalized.split(/\s+/);
-    await handleRejectSlip(event, requestId, reasonParts.join(" "));
-    return;
-  }
-
   const number = parseRegistrationNumber(normalized);
 
   if (!number) {
@@ -541,7 +516,6 @@ async function handleMethodSelection(event: LineWebhookEvent, requestId: string,
 
   if (method === "cash") {
     await updateRecord<Row>("line_payment_requests", request.id, { method, status: "cash_pending" }, ["method", "status"]);
-    await notifyTreasurerForReview(request.id, "ชำระเงินสด: รอเหรัญญิกรับเงินและยืนยันเอง");
     await replyLineMessages(event.replyToken, [
       createFlexMessage("รับเรื่องชำระเงินสดไว้แล้ว", createCashPaymentBubble(request.amount)),
     ]);
@@ -611,7 +585,7 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
   const duplicateSuspected = duplicateByQr || duplicateByHash;
   const slipStatus = duplicateSuspected
     ? "duplicate_suspected"
-    : slipCheck.amountMatches === false
+    : !slipCheck.qrReadable || slipCheck.amountMatches === false
       ? "wrong_amount"
       : "pending_slip_review";
   const autoCheckResult = buildAutoCheckResult({
@@ -627,12 +601,14 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     contentType: image.contentType,
     data: imageBuffer,
   });
+  const unreadableReason = "ระบบอ่าน QR จากสลิปไม่ได้";
+  const shouldRejectImmediately = !slipCheck.qrReadable;
 
   await updateRecord<Row>(
     "line_payment_requests",
     activeRequest.id,
     {
-      status: "pending_slip_review",
+      status: shouldRejectImmediately ? "rejected" : "pending_slip_review",
       slip_status: slipStatus,
       slip_url: proof.url,
       slip_pathname: proof.pathname,
@@ -640,6 +616,9 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       slip_image_hash: slipCheck.imageHash,
       slip_ocr_text: null,
       slip_auto_check_result: autoCheckResult,
+      reject_reason: shouldRejectImmediately ? unreadableReason : null,
+      reviewed_by: shouldRejectImmediately ? "system-slip-check" : null,
+      reviewed_at: shouldRejectImmediately ? new Date().toISOString() : null,
     },
     [
       "status",
@@ -650,13 +629,22 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       "slip_image_hash",
       "slip_ocr_text",
       "slip_auto_check_result",
+      "reject_reason",
+      "reviewed_by",
+      "reviewed_at",
     ]
   );
 
-  await replyLineText(event.replyToken, duplicateSuspected
+  await replyLineText(event.replyToken, shouldRejectImmediately
+    ? [
+      "สลิปยังไม่ผ่านการตรวจสอบนะครับ 😅",
+      `เหตุผล: ${unreadableReason}`,
+      "กรุณาส่งสลิปใหม่อีกครั้งได้เลย",
+    ].join("\n")
+    : duplicateSuspected
     ? [
       "สลิปนี้เหมือนเคยถูกส่งมาแล้วนะครับ 🧐",
-      "ระบบจะส่งให้เหรัญญิกตรวจสอบอีกครั้ง",
+      "ระบบบันทึกไว้ให้เหรัญญิกตรวจสอบอีกครั้ง",
       "ถ้าเป็นสลิปใหม่จริง ๆ ไม่ต้องกังวลครับ",
     ].join("\n")
     : [
@@ -667,8 +655,6 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       "ถ้าตรวจผ่าน ระบบจะแจ้งยืนยันให้อีกครั้งนะครับ",
     ].join("\n")
   );
-
-  await notifyTreasurerForReview(activeRequest.id, autoCheckResult);
 }
 
 async function cancelActivePayment(event: LineWebhookEvent) {
@@ -1103,10 +1089,6 @@ function isCoreTextCommand(text: string) {
   return isPayCommand(text) || isCancelCommand(text) || isStatusCommand(text) || isHistoryCommand(text) || isTotalCommand(text);
 }
 
-function isSlipReviewTextCommand(text: string) {
-  return /^approve\s+\S+/i.test(text.trim()) || /^reject\s+\S+/i.test(text.trim());
-}
-
 function isRegistrationText(text: string) {
   return isRegistrationHelpCommand(text) || parseRegistrationNumber(text) !== null;
 }
@@ -1173,127 +1155,6 @@ function quickMessage(label: string, text: string) {
       text,
     },
   };
-}
-
-function getReviewAdminLineUserIds() {
-  return Array.from(new Set([
-    process.env.TREASURER_LINE_USER_ID,
-    process.env.ADMIN_LINE_USER_ID,
-  ].filter((value): value is string => Boolean(value))));
-}
-
-function isReviewAdmin(lineUserId: string | undefined): lineUserId is string {
-  return Boolean(lineUserId && getReviewAdminLineUserIds().includes(lineUserId));
-}
-
-async function handleApproveSlip(event: LineWebhookEvent, requestId: string) {
-  const reviewerLineUserId = event.source?.userId;
-  if (!isReviewAdmin(reviewerLineUserId)) {
-    await replyLineText(event.replyToken, "คำสั่งนี้ใช้ได้เฉพาะเหรัญญิกหรือแอดมินเท่านั้นครับ 🔐");
-    return;
-  }
-
-  try {
-    await approveLinePaymentRequest({
-      requestId,
-      reviewerLineUserId,
-    });
-    await replyLineText(event.replyToken, "อนุมัติสลิปและบันทึกชำระเงินเรียบร้อยแล้วครับ ✅");
-  } catch (error) {
-    await replyLineText(event.replyToken, error instanceof Error ? error.message : "อนุมัติสลิปไม่สำเร็จครับ");
-  }
-}
-
-async function promptSlipRejectReason(event: LineWebhookEvent, requestId: string) {
-  if (!isReviewAdmin(event.source?.userId)) {
-    await replyLineText(event.replyToken, "คำสั่งนี้ใช้ได้เฉพาะเหรัญญิกหรือแอดมินเท่านั้นครับ 🔐");
-    return;
-  }
-
-  await replyLineText(event.replyToken, [
-    "กรุณาพิมพ์เหตุผลที่ปฏิเสธสลิปตามรูปแบบนี้ครับ",
-    "",
-    `reject ${requestId} เหตุผล`,
-    "",
-    "เช่น สลิปยอดเงินไม่ตรง",
-  ].join("\n"));
-}
-
-async function handleRejectSlip(event: LineWebhookEvent, requestId: string, reason: string) {
-  const reviewerLineUserId = event.source?.userId;
-  if (!isReviewAdmin(reviewerLineUserId)) {
-    await replyLineText(event.replyToken, "คำสั่งนี้ใช้ได้เฉพาะเหรัญญิกหรือแอดมินเท่านั้นครับ 🔐");
-    return;
-  }
-
-  if (!reason.trim()) {
-    await promptSlipRejectReason(event, requestId);
-    return;
-  }
-
-  try {
-    await rejectLinePaymentRequest({
-      requestId,
-      reviewerLineUserId,
-      reason,
-    });
-    await replyLineText(event.replyToken, "ปฏิเสธสลิปและแจ้งนักเรียนเรียบร้อยแล้วครับ");
-  } catch (error) {
-    await replyLineText(event.replyToken, error instanceof Error ? error.message : "ปฏิเสธสลิปไม่สำเร็จครับ");
-  }
-}
-
-async function notifyTreasurerForReview(requestId: string, autoCheckResult: string) {
-  const adminIds = getReviewAdminLineUserIds();
-  if (adminIds.length === 0) return;
-
-  const rows = await listRecords<Row>("line_payment_requests");
-  const row = rows.find((item) => item.id === requestId);
-  if (!row) return;
-  const request = mapLinePaymentRequest(row);
-  const [studentRows, scheduleRows] = await Promise.all([
-    listRecords<Row>("students"),
-    listRecords<Row>("schedules"),
-  ]);
-  const student = studentRows.map(mapStudent).find((item) => item.id === request.student_id);
-  const schedule = scheduleRows.map(mapSchedule).find((item) => item.id === request.schedule_id);
-  const studentName = student
-    ? `${student.prefix} ${student.first_name} ${student.last_name}`
-    : "ไม่พบนักเรียน";
-  const paymentTitle = schedule?.name || "รายการชำระเงิน";
-  const slipUrl = request.slip_url ? toAbsoluteAppUrl(request.slip_url) : "ไม่มีสลิปแนบ";
-  const message = [
-    "มีสลิปรอตรวจสอบ 🧾",
-    "",
-    `ชื่อ: ${studentName}`,
-    `รายการ: ${paymentTitle}`,
-    `ยอดที่ต้องจ่าย: ${request.amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
-    `ช่องทาง: ${formatMethod(request.method)}`,
-    `ผลตรวจอัตโนมัติ: ${autoCheckResult}`,
-    `ลิงก์สลิป: ${slipUrl}`,
-    "",
-    "กรุณาตรวจสลิปแล้วกดอนุมัติหรือปฏิเสธ",
-  ].join("\n");
-
-  const reviewMessage = {
-    type: "text",
-    text: message,
-    quickReply: {
-      items: [
-        quickPostback("อนุมัติ", `approve_slip:${request.id}`),
-        quickPostback("ปฏิเสธ", `reject_slip:${request.id}`),
-      ],
-    },
-  };
-
-  await Promise.all(adminIds.map((adminId) => pushLineMessages(adminId, [reviewMessage])));
-}
-
-function toAbsoluteAppUrl(path: string) {
-  if (/^https?:\/\//.test(path)) return path;
-  const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "";
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || vercelUrl;
-  return baseUrl ? `${baseUrl}${path}` : path;
 }
 
 function buildAutoCheckResult({

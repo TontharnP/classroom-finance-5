@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, Megaphone } from "lucide-react";
+import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, BadgeCheck, Megaphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, differenceInDays } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { deleteSchedule as deleteScheduleRemote } from "@/lib/supabase/schedules";
 import { sendScheduleLineAnnouncement, sendScheduleLineReminders } from "@/lib/supabase/schedules";
-import { getLinePaymentRequests } from "@/lib/supabase/linePaymentRequests";
-import { dbLinePaymentRequestToLinePaymentRequest } from "@/lib/supabase/adapter";
+import { approveLinePaymentRequest, getLinePaymentRequests, updateLinePaymentRequest } from "@/lib/supabase/linePaymentRequests";
+import { dbTransactionToTransaction, dbLinePaymentRequestToLinePaymentRequest } from "@/lib/supabase/adapter";
 import type { LinePaymentRequest, Schedule } from "@/types";
 import { toast } from "react-hot-toast";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -25,6 +25,7 @@ type ScheduleDetailModalProps = {
 export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFilter }: ScheduleDetailModalProps) {
   const data = useAppStore((state) => state.data);
   const deleteSchedule = useAppStore((state) => state.deleteSchedule);
+  const addTransaction = useAppStore((state) => state.addTransaction);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [quickPayStudent, setQuickPayStudent] = useState<{ scheduleId: string; studentId: string } | null>(null);
@@ -32,6 +33,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
   const [sendingReminder, setSendingReminder] = useState<"all" | string | null>(null);
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
   const [lineRequests, setLineRequests] = useState<LinePaymentRequest[]>([]);
+  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
 
   // Get students for this schedule
   const scheduleStudents = data.students
@@ -173,6 +175,35 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
       toast.error(error instanceof Error ? error.message : "ส่งแจ้งกำหนดการไม่สำเร็จ");
     } finally {
       setSendingAnnouncement(false);
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string) => {
+    setReviewingRequestId(requestId);
+    try {
+      const result = await approveLinePaymentRequest(requestId);
+      if (result.transaction) addTransaction(dbTransactionToTransaction(result.transaction));
+      setLineRequests((requests) => requests.filter((request) => request.id !== requestId));
+      toast.success("อนุมัติและบันทึกชำระเงินแล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "อนุมัติไม่สำเร็จ");
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    const reason = window.prompt("เหตุผลที่ปฏิเสธสลิป", "สลิปยังไม่ผ่านการตรวจสอบ");
+    if (reason === null) return;
+    setReviewingRequestId(requestId);
+    try {
+      await updateLinePaymentRequest(requestId, { status: "rejected", reject_reason: reason });
+      setLineRequests((requests) => requests.filter((request) => request.id !== requestId));
+      toast.success("ปฏิเสธรายการแล้ว และแจ้งนักเรียนผ่าน LINE แล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ปฏิเสธไม่สำเร็จ");
+    } finally {
+      setReviewingRequestId(null);
     }
   };
 
@@ -421,8 +452,24 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                               </div>
                             </div>
 
-                            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-3 py-3 text-sm font-semibold text-blue-700 dark:border-blue-500/30 dark:bg-blue-950/25 dark:text-blue-300 lg:max-w-72">
-                              อนุมัติหรือปฏิเสธผ่าน LINE ของเหรัญญิกเท่านั้น เพื่อยืนยันตัวตนผู้ตรวจครับ
+                            <div className="grid grid-cols-2 gap-2 lg:min-w-64">
+                              <button
+                                type="button"
+                                onClick={() => handleRejectRequest(request.id)}
+                                disabled={reviewingRequestId !== null}
+                                className="rounded-2xl border border-rose-200 bg-white px-3 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-45 dark:border-rose-500/35 dark:bg-white/5 dark:text-rose-300 dark:hover:bg-rose-950/25"
+                              >
+                                ไม่อนุมัติ
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApproveRequest(request.id)}
+                                disabled={reviewingRequestId !== null}
+                                className="apple-button justify-center px-3 py-3 text-sm disabled:opacity-45"
+                              >
+                                <BadgeCheck className="h-4 w-4" />
+                                อนุมัติ
+                              </button>
                             </div>
                           </div>
                         </div>
