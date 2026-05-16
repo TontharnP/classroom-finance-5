@@ -50,6 +50,18 @@ export async function downloadSlipImage(pathname: string) {
   return data;
 }
 
+export async function deleteSlipImages(pathnames: string[]) {
+  const cleanPathnames = pathnames.filter(Boolean);
+  if (cleanPathnames.length === 0) return;
+
+  const { error } = await getSupabaseAdmin()
+    .storage
+    .from(getSlipBucketName())
+    .remove(cleanPathnames);
+
+  if (error) throw error;
+}
+
 function extensionFromContentType(contentType: string) {
   if (contentType.includes("png")) return ".png";
   if (contentType.includes("webp")) return ".webp";

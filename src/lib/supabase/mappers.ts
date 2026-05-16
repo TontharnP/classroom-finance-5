@@ -88,6 +88,7 @@ export function mapLinePaymentRequest(row: Row): LinePaymentRequest {
     slip_status: row.slip_status ? (String(row.slip_status) as LinePaymentRequest["slip_status"]) : undefined,
     slip_qr_payload: row.slip_qr_payload ? String(row.slip_qr_payload) : undefined,
     slip_image_hash: row.slip_image_hash ? String(row.slip_image_hash) : undefined,
+    slip_transaction_id: row.slip_transaction_id ? String(row.slip_transaction_id) : undefined,
     slip_ocr_text: row.slip_ocr_text ? String(row.slip_ocr_text) : undefined,
     slip_auto_check_result: row.slip_auto_check_result ? String(row.slip_auto_check_result) : undefined,
     transaction_id: row.transaction_id ? String(row.transaction_id) : undefined,

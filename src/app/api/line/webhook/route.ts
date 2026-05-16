@@ -6,6 +6,7 @@ import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { storeSlipImage } from "@/lib/server/slipStorage";
 import { linkLineRichMenuByName } from "@/lib/server/line";
+import { approveLinePaymentRequest } from "@/lib/server/linePaymentReview";
 
 const PROMPTPAY_ID = "004666006046829";
 
@@ -557,7 +558,10 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
 
   const image = await downloadLineMessageContent(messageId);
   const imageBuffer = Buffer.from(image.data);
-  const slipCheck = await analyzeSlipImage(imageBuffer, activeRequest.amount);
+  const slipCheck = await analyzeSlipImage(imageBuffer, activeRequest.amount, {
+    expectedReceiverAccounts: getExpectedSlipReceiverAccounts(activeRequest.method),
+    expectedReceiverName: process.env.SLIP_RECEIVER_ACCOUNT_NAME,
+  });
   const existingSlipRows = (await listRecords<Row>("line_payment_requests"))
     .filter((row) => String(row.id) !== activeRequest.id);
   const duplicateByQr = Boolean(
@@ -565,7 +569,18 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       existingSlipRows.some((row) => row.slip_qr_payload === slipCheck.qrPayload)
   );
   const duplicateByHash = existingSlipRows.some((row) => row.slip_image_hash === slipCheck.imageHash);
-  const duplicateSuspected = duplicateByQr || duplicateByHash;
+  const duplicateByTransaction = Boolean(
+    slipCheck.slipTransactionId &&
+      existingSlipRows.some((row) => String(row.slip_transaction_id || "").toUpperCase() === slipCheck.slipTransactionId)
+  );
+  const duplicateSuspected = duplicateByQr || duplicateByHash || duplicateByTransaction;
+  const canAutoApprove =
+    slipCheck.qrReadable &&
+    slipCheck.amountMatches === true &&
+    slipCheck.receiverAccountMatches === true &&
+    slipCheck.receiverNameMatches === true &&
+    Boolean(slipCheck.slipTransactionId) &&
+    !duplicateSuspected;
   const slipStatus = duplicateSuspected
     ? "duplicate_suspected"
     : !slipCheck.qrReadable || slipCheck.amountMatches === false
@@ -574,9 +589,14 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
   const autoCheckResult = buildAutoCheckResult({
     duplicateByQr,
     duplicateByHash,
+    duplicateByTransaction,
     amountMatches: slipCheck.amountMatches,
     qrReadable: slipCheck.qrReadable,
     qrAmount: slipCheck.qrAmount,
+    receiverAccountMatches: slipCheck.receiverAccountMatches,
+    receiverNameMatches: slipCheck.receiverNameMatches,
+    slipTransactionId: slipCheck.slipTransactionId,
+    autoApproved: canAutoApprove,
   });
 
   const proof = await storeSlipImage({
@@ -584,24 +604,23 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     contentType: image.contentType,
     data: imageBuffer,
   });
-  const unreadableReason = "ระบบอ่าน QR จากสลิปไม่ได้";
-  const shouldRejectImmediately = !slipCheck.qrReadable;
 
   await updateRecord<Row>(
     "line_payment_requests",
     activeRequest.id,
     {
-      status: shouldRejectImmediately ? "rejected" : "pending_slip_review",
+      status: "pending_slip_review",
       slip_status: slipStatus,
       slip_url: proof.url,
       slip_pathname: proof.pathname,
       slip_qr_payload: slipCheck.qrPayload ?? null,
       slip_image_hash: slipCheck.imageHash,
+      slip_transaction_id: slipCheck.slipTransactionId ?? null,
       slip_ocr_text: null,
       slip_auto_check_result: autoCheckResult,
-      reject_reason: shouldRejectImmediately ? unreadableReason : null,
-      reviewed_by: shouldRejectImmediately ? "system-slip-check" : null,
-      reviewed_at: shouldRejectImmediately ? new Date().toISOString() : null,
+      reject_reason: null,
+      reviewed_by: null,
+      reviewed_at: null,
     },
     [
       "status",
@@ -610,6 +629,7 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       "slip_pathname",
       "slip_qr_payload",
       "slip_image_hash",
+      "slip_transaction_id",
       "slip_ocr_text",
       "slip_auto_check_result",
       "reject_reason",
@@ -618,13 +638,21 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     ]
   );
 
-  await replyLineText(event.replyToken, shouldRejectImmediately
-    ? [
-      "สลิปยังไม่ผ่านการตรวจสอบนะครับ 😅",
-      `เหตุผล: ${unreadableReason}`,
-      "กรุณาส่งสลิปใหม่อีกครั้งได้เลย",
-    ].join("\n")
-    : duplicateSuspected
+  if (canAutoApprove) {
+    await approveLinePaymentRequest({
+      requestId: activeRequest.id,
+      reviewerLineUserId: "system-auto-slip",
+      notifyStudent: false,
+    });
+    await replyLineText(event.replyToken, [
+      "สลิปผ่านแล้วครับ ✅",
+      "ระบบตรวจสอบสลิปอัตโนมัติเรียบร้อย",
+      "ชำระเงินเรียบร้อย ขอบคุณมากครับ 🙌",
+    ].join("\n"));
+    return;
+  }
+
+  await replyLineText(event.replyToken, duplicateSuspected
     ? [
       "สลิปนี้เหมือนเคยถูกส่งมาแล้วนะครับ 🧐",
       "ระบบบันทึกไว้ให้เหรัญญิกตรวจสอบอีกครั้ง",
@@ -1150,21 +1178,32 @@ async function getUnpaidSchedulesForStudent(studentId: string) {
 function buildAutoCheckResult({
   duplicateByQr,
   duplicateByHash,
+  duplicateByTransaction,
   amountMatches,
   qrReadable,
   qrAmount,
+  receiverAccountMatches,
+  receiverNameMatches,
+  slipTransactionId,
+  autoApproved,
 }: {
   duplicateByQr: boolean;
   duplicateByHash: boolean;
+  duplicateByTransaction: boolean;
   amountMatches: boolean | null;
   qrReadable: boolean;
   qrAmount?: number;
+  receiverAccountMatches: boolean | null;
+  receiverNameMatches: boolean | null;
+  slipTransactionId?: string;
+  autoApproved: boolean;
 }) {
   const parts: string[] = [];
-  if (duplicateByQr || duplicateByHash) {
+  if (duplicateByQr || duplicateByHash || duplicateByTransaction) {
     const source = [
       duplicateByQr ? "QR" : "",
       duplicateByHash ? "รูปภาพ" : "",
+      duplicateByTransaction ? "เลขธุรกรรม" : "",
     ].filter(Boolean).join("และ");
     parts.push(`สงสัยสลิปซ้ำจาก${source}`);
   }
@@ -1172,8 +1211,32 @@ function buildAutoCheckResult({
   if (amountMatches === false) {
     parts.push(`ยอดใน QR ไม่ตรง${typeof qrAmount === "number" ? ` (${formatBaht(qrAmount)})` : ""}`);
   }
+  if (amountMatches === null) parts.push("ยังยืนยันยอดเงินจาก QR ไม่ได้");
+  if (!slipTransactionId) parts.push("ยังหาเลขธุรกรรมจากสลิปไม่ได้");
+  if (receiverAccountMatches === false) parts.push("บัญชีปลายทางไม่ตรงกับที่ตั้งค่าไว้");
+  if (receiverAccountMatches === null) parts.push("ยังตรวจบัญชีปลายทางไม่ได้");
+  if (receiverNameMatches === false) parts.push("ชื่อบัญชีปลายทางไม่ตรงกับที่ตั้งค่าไว้");
+  if (receiverNameMatches === null) parts.push("ยังตรวจชื่อบัญชีปลายทางไม่ได้");
+  if (autoApproved) return "ผ่านเงื่อนไขอัตโนมัติ: ยอดตรง บัญชีตรง ชื่อตรง เลขธุรกรรมใหม่";
   if (parts.length === 0) return "อ่าน QR ได้ ไม่พบรายการซ้ำ และยอดตรงกับรายการ";
   return parts.join(" • ");
+}
+
+function getExpectedSlipReceiverAccounts(method: string | undefined) {
+  const configured = [
+    process.env.SLIP_RECEIVER_ACCOUNT_NUMBER,
+    process.env.SLIP_RECEIVER_ACCOUNT_NUMBERS,
+    method === "truemoney" ? process.env.TRUEMONEY_RECEIVER_ACCOUNT_NUMBER : undefined,
+  ].flatMap((value) => splitEnvList(value));
+
+  return Array.from(new Set([...configured, PROMPTPAY_ID].filter(Boolean)));
+}
+
+function splitEnvList(value: string | undefined) {
+  return (value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function truncateLabel(label: string, maxLength: number) {

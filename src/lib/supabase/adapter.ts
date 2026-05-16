@@ -141,6 +141,7 @@ export function dbLinePaymentRequestToLinePaymentRequest(db: DbLinePaymentReques
     slipStatus: db.slip_status,
     slipQrPayload: db.slip_qr_payload,
     slipImageHash: db.slip_image_hash,
+    slipTransactionId: db.slip_transaction_id,
     slipOcrText: db.slip_ocr_text,
     slipAutoCheckResult: db.slip_auto_check_result,
     transactionId: db.transaction_id,

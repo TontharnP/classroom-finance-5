@@ -88,6 +88,7 @@ export type LinePaymentRequest = {
   slip_status?: SlipStatus;
   slip_qr_payload?: string;
   slip_image_hash?: string;
+  slip_transaction_id?: string;
   slip_ocr_text?: string;
   slip_auto_check_result?: string;
   transaction_id?: string;
@@ -129,13 +130,14 @@ export type TransactionUpdate = Partial<Omit<Transaction, "id" | "created_at" | 
   source_pocket_id?: string | null;
   destination_pocket_id?: string | null;
 };
-export type LinePaymentRequestUpdate = Partial<Omit<LinePaymentRequest, "id" | "created_at" | "updated_at" | "method" | "slip_url" | "slip_pathname" | "slip_status" | "slip_qr_payload" | "slip_image_hash" | "slip_ocr_text" | "slip_auto_check_result" | "transaction_id" | "note" | "reviewed_by" | "reviewed_at" | "reject_reason" | "paid_at">> & {
+export type LinePaymentRequestUpdate = Partial<Omit<LinePaymentRequest, "id" | "created_at" | "updated_at" | "method" | "slip_url" | "slip_pathname" | "slip_status" | "slip_qr_payload" | "slip_image_hash" | "slip_transaction_id" | "slip_ocr_text" | "slip_auto_check_result" | "transaction_id" | "note" | "reviewed_by" | "reviewed_at" | "reject_reason" | "paid_at">> & {
   method?: LinePaymentRequest["method"] | null;
   slip_url?: string | null;
   slip_pathname?: string | null;
   slip_status?: LinePaymentRequest["slip_status"] | null;
   slip_qr_payload?: string | null;
   slip_image_hash?: string | null;
+  slip_transaction_id?: string | null;
   slip_ocr_text?: string | null;
   slip_auto_check_result?: string | null;
   transaction_id?: string | null;

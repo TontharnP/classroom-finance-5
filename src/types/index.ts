@@ -91,6 +91,7 @@ export interface LinePaymentRequest {
   slipStatus?: SlipStatus;
   slipQrPayload?: string;
   slipImageHash?: string;
+  slipTransactionId?: string;
   slipOcrText?: string;
   slipAutoCheckResult?: string;
   transactionId?: string;

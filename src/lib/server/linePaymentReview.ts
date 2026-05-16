@@ -3,15 +3,19 @@ import "server-only";
 import { createRecord, getRecord, getSupabaseAdmin, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest, mapTransaction } from "@/lib/supabase/mappers";
 import { pushLineText } from "@/lib/server/line";
+import { deleteSlipImages } from "@/lib/server/slipStorage";
 
 const REVIEWABLE_STATUSES = ["pending_slip_review", "pending_review", "cash_pending"];
+const MAX_APPROVED_SLIPS_PER_LINE_USER = 6;
 
 export async function approveLinePaymentRequest({
   requestId,
   reviewerLineUserId,
+  notifyStudent = true,
 }: {
   requestId: string;
   reviewerLineUserId: string;
+  notifyStudent?: boolean;
 }) {
   const existingRow = await getRecord<Row>("line_payment_requests", requestId);
   if (!existingRow) throw new Error("Line payment request not found");
@@ -92,10 +96,16 @@ export async function approveLinePaymentRequest({
 
   if (updateError) throw updateError;
 
-  await pushLineText(paymentRequest.line_user_id, [
-    "สลิปผ่านแล้วครับ ✅",
-    "ชำระเงินเรียบร้อย ขอบคุณมากครับ 🙌",
-  ].join("\n"));
+  await enforceApprovedSlipRetention(paymentRequest.line_user_id).catch((error) => {
+    console.error("Failed to enforce approved slip retention", error);
+  });
+
+  if (notifyStudent) {
+    await pushLineText(paymentRequest.line_user_id, [
+      "สลิปผ่านแล้วครับ ✅",
+      "ชำระเงินเรียบร้อย ขอบคุณมากครับ 🙌",
+    ].join("\n"));
+  }
 
   return {
     request: mapLinePaymentRequest(updatedRow || lockedRow),
@@ -139,4 +149,34 @@ export async function rejectLinePaymentRequest({
   ].join("\n"));
 
   return request;
+}
+
+async function enforceApprovedSlipRetention(lineUserId: string) {
+  const { data, error } = await getSupabaseAdmin()
+    .from("line_payment_requests")
+    .select("id, slip_pathname")
+    .eq("line_user_id", lineUserId)
+    .eq("status", "approved")
+    .eq("slip_status", "approved")
+    .not("slip_pathname", "is", null)
+    .order("paid_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const staleRows = (data || []).slice(MAX_APPROVED_SLIPS_PER_LINE_USER);
+  const stalePathnames = staleRows
+    .map((row) => typeof row.slip_pathname === "string" ? row.slip_pathname : "")
+    .filter(Boolean);
+  if (staleRows.length === 0 || stalePathnames.length === 0) return;
+
+  await deleteSlipImages(stalePathnames);
+
+  const staleIds = staleRows.map((row) => String(row.id)).filter(Boolean);
+  const { error: updateError } = await getSupabaseAdmin()
+    .from("line_payment_requests")
+    .update({ slip_url: null, slip_pathname: null })
+    .in("id", staleIds);
+
+  if (updateError) throw updateError;
 }

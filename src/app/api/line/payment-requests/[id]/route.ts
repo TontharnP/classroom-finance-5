@@ -14,6 +14,7 @@ const requestColumns = [
   "slip_status",
   "slip_qr_payload",
   "slip_image_hash",
+  "slip_transaction_id",
   "slip_ocr_text",
   "slip_auto_check_result",
   "transaction_id",
