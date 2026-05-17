@@ -1,8 +1,8 @@
 # Classroom Finance 5
 
-Classroom Finance 5 คือระบบจัดการการเงินห้องเรียนที่รวมเว็บแอปสำหรับเหรัญญิกและ LINE bot สำหรับนักเรียนไว้ในโปรเจกต์เดียว ระบบนี้ดูแลตั้งแต่รายรับรายจ่าย กำหนดการเก็บเงิน รายชื่อนักเรียน กระเป๋าเงิน หมวดหมู่ธุรกรรม การแจ้งเตือนผ่าน LINE ไปจนถึง workflow การชำระเงินด้วยสลิป
+Classroom Finance 5 is a classroom finance management system that combines an admin web application for the treasurer with a LINE bot experience for students. It manages income, expenses, collection schedules, students, pockets, transaction categories, LINE reminders, LINE payment sessions, slip uploads, and semi-automatic slip checking.
 
-โปรเจกต์นี้เป็น Next.js App Router application ที่ใช้ Supabase เป็นฐานข้อมูลหลัก ใช้ Supabase Storage สำหรับสลิป ใช้ Vercel Blob สำหรับรูปอัปโหลดทั่วไป และใช้ LINE Messaging API สำหรับประสบการณ์ฝั่งนักเรียน
+The application is built with the Next.js App Router. Supabase is the primary database, Supabase Storage stores private payment slips, Vercel Blob stores general uploaded images, and LINE Messaging API powers the student-facing payment workflow.
 
 ## Table of Contents
 
@@ -19,74 +19,77 @@ Classroom Finance 5 คือระบบจัดการการเงิน
 - [Slip Checking Design](#slip-checking-design)
 - [Database Integration](#database-integration)
 - [Storage Rules](#storage-rules)
-- [Local Slip Debugging](#local-slip-debugging)
 - [API Routes](#api-routes)
 - [Operational Commands](#operational-commands)
 - [Deployment Notes](#deployment-notes)
 - [Troubleshooting](#troubleshooting)
+- [Security Notes](#security-notes)
+- [Development Conventions](#development-conventions)
 - [Known Engineering Notes](#known-engineering-notes)
 
 ## Product Overview
 
-ระบบแบ่งผู้ใช้งานหลักเป็น 2 ฝั่ง:
+The product has two primary user surfaces:
 
-- เหรัญญิกหรือผู้ดูแล ใช้งานผ่านเว็บ dashboard เพื่อจัดการข้อมูลทั้งหมด
-- นักเรียน ใช้งานผ่าน LINE Official Account เพื่อดูยอดค้าง ชำระเงิน ส่งสลิป และรับผลตรวจ
+- Treasurer/admin web UI for managing all classroom finance data.
+- Student LINE Official Account flow for registration, debt lookup, payment selection, slip submission, and payment result notifications.
 
-ข้อมูลเงินจริงจะถูกบันทึกใน `transactions` เท่านั้นเมื่อชำระสำเร็จแล้ว ส่วนรายการที่อยู่ระหว่างเลือก จ่าย หรือรอตรวจจะอยู่ใน `line_payment_requests` เพื่อไม่ให้ยอดเงินหลักผิดพลาด
+Completed money movement is recorded only in `transactions`. Any payment that is still being selected, waiting for a slip, or waiting for review is kept in `line_payment_requests`. This separation prevents pending LINE interactions from corrupting the real financial ledger.
+
+The app is intentionally conservative around payment correctness. QR, image hash, OCR, and transaction-reference checks are treated as helper checks. Ambiguous slips are routed to web review instead of being blindly marked as paid.
 
 ## Current Capabilities
 
 ### Dashboard
 
-- แสดงยอดคงเหลือรวม
-- สรุปรายรับ รายจ่าย และยอดเก็บตามกำหนดการ
-- แยกยอดตามวิธีชำระ เช่น K PLUS, TrueMoney, เงินสด
-- แสดงกราฟและภาพรวมการเงินห้องเรียน
-- เชื่อมไปยังหน้ากำหนดการเพื่อดูนักเรียนที่ชำระแล้วหรือยังค้าง
+- Shows total balance.
+- Summarizes income, expenses, and schedule-derived collections.
+- Breaks down income by payment method such as K PLUS, TrueMoney, and cash.
+- Provides charts and collection overview cards.
+- Links into schedule detail views for paid/unpaid student status.
 
 ### Transactions
 
-- เพิ่ม แก้ไข ลบรายการเงิน
-- รองรับ `income`, `expense`, `transfer`
-- แยกธุรกรรมปกติกับธุรกรรมที่มาจาก schedule
-- ใช้ `schedule_id` และ `student_id` เพื่อผูกยอดชำระกับรายการเก็บเงิน
-- ใช้ `pocket_id` เพื่อแยกกระเป๋าเงินตามวิธีรับเงิน
+- Creates, edits, and deletes finance records.
+- Supports `income`, `expense`, and `transfer` transaction kinds.
+- Separates normal transactions from schedule-sourced payment transactions.
+- Uses `schedule_id` and `student_id` to bind a payment to a collection schedule and a student.
+- Uses `pocket_id` to associate received money with a payment pocket.
 
 ### Schedules
 
-- สร้างกำหนดการเก็บเงินพร้อมยอดต่อคน
-- เลือกนักเรียนที่ต้องชำระในแต่ละกำหนดการ
-- จัดโฟลเดอร์กำหนดการ
-- ดูสถานะจ่ายแล้วและค้างชำระ
-- ส่งแจ้งเตือน LINE ไปยังนักเรียนที่ยังค้าง
-- เปิดรายละเอียดกำหนดการเพื่ออนุมัติหรือปฏิเสธ LINE payment requests
+- Creates collection schedules with a per-student amount.
+- Tracks which students are included in each schedule.
+- Supports schedule folders.
+- Shows paid and unpaid student status.
+- Sends LINE reminders to students who still owe money.
+- Opens schedule detail review panels for approving or rejecting LINE payment requests.
 
 ### Students
 
-- จัดการข้อมูลนักเรียนและเลขที่
-- เก็บ `line_user_id` หลังนักเรียนลงทะเบียนผ่าน LINE
-- ดูสถานะหนี้ของนักเรียนแต่ละคน
-- อัปโหลดรูปโปรไฟล์ผ่าน Vercel Blob
+- Manages student records and classroom numbers.
+- Stores `line_user_id` after a student registers through LINE.
+- Shows per-student debt status.
+- Uploads profile images through Vercel Blob.
 
 ### Categories and Pockets
 
-- ใช้ categories เพื่อจัดกลุ่มธุรกรรม
-- ใช้ pockets เพื่อแยกเงินตามช่องทางหรือกระเป๋า
-- รองรับ pocket-related columns ใน migration `004_add_pockets_columns.sql`
+- Categories group transactions.
+- Pockets separate money by source or payment method.
+- Pocket-related database fields are added through `004_add_pockets_columns.sql`.
 
 ### LINE Bot
 
-- รับ webhook ที่ `/api/line/webhook`
-- ลงทะเบียนนักเรียนจากข้อความ LINE
-- แสดงเมนูสถานะและประวัติ
-- แสดงรายการค้างชำระด้วย Flex message ปุ่มใหญ่
-- สร้าง payment request
-- รับรูปสลิปจาก LINE Content API
-- อัปโหลดสลิปเข้า Supabase Storage
-- ตรวจสลิปเบื้องต้น
-- Auto approve เฉพาะกรณีที่ข้อมูลครบตามเงื่อนไขของ production checker
-- ส่งรายการที่น่าสงสัยเข้า web review
+- Receives webhook events at `/api/line/webhook`.
+- Registers students from LINE text messages.
+- Shows status and history menus.
+- Displays unpaid debts through large LINE Flex message buttons.
+- Creates LINE payment requests.
+- Downloads slip images from the LINE Content API.
+- Uploads slip images to Supabase Storage.
+- Performs production slip helper checks.
+- Auto-approves only when the production checker has enough evidence.
+- Sends suspicious or incomplete slips to web review.
 
 ## Tech Stack
 
@@ -115,15 +118,15 @@ src/
   app/
     api/
       line/
-        webhook/route.ts                  LINE webhook หลัก
-        rich-menu/setup/route.ts           ตั้งค่า LINE rich menu
-        payment-requests/route.ts          list pending payment requests
-        payment-requests/[id]/route.ts     reject/update request
-        payment-requests/[id]/approve/route.ts approve request
+        webhook/route.ts                      Main LINE webhook
+        rich-menu/setup/route.ts              LINE rich menu setup
+        payment-requests/route.ts             List pending payment requests
+        payment-requests/[id]/route.ts        Read/update/reject a request
+        payment-requests/[id]/approve/route.ts Approve a request
       uploads/
-        route.ts                           general upload
-        slips/route.ts                     proxy download private slip image
-      schedules/[id]/reminders/line/route.ts LINE schedule reminders
+        route.ts                              General upload endpoint
+        slips/route.ts                        Private slip image proxy
+      schedules/[id]/reminders/line/route.ts  LINE schedule reminders
     dashboard/
     transactions/
     schedule/
@@ -141,42 +144,42 @@ src/
     ui/
   lib/
     server/
-      line.ts                              LINE push/rich-menu helpers
-      linePaymentReview.ts                 approve/reject LINE payment requests
-      lineScheduleMessages.ts              schedule reminder push messages
-      slipCheck.ts                         production QR/hash slip analyzer
-      slipStorage.ts                       Supabase Storage helper for slips
+      line.ts                                 LINE push and rich-menu helpers
+      linePaymentReview.ts                    Approve/reject LINE payment requests
+      lineScheduleMessages.ts                 Schedule reminder push messages
+      slipCheck.ts                            Production QR/hash slip analyzer
+      slipStorage.ts                          Supabase Storage helper for slips
     supabase/
-      server.ts                            service-role server client and CRUD helpers
-      mappers.ts                           DB row -> typed object mapping
-      linePaymentRequests.ts               client wrapper for review UI
+      server.ts                               Service-role server client and CRUD helpers
+      mappers.ts                              Database row to typed object mapping
+      linePaymentRequests.ts                  Client wrapper for review UI
     calculations.ts
     store.ts
   types/
-    index.ts                               UI-facing camelCase types
-    supabase.ts                            DB/API-facing snake_case types
+    index.ts                                  UI-facing camelCase types
+    supabase.ts                               DB/API-facing snake_case types
 scripts/
-  check-slip.js                            standalone local slip checker with OCR
+  check-slip.js                               Standalone local slip checker with OCR
 supabase/
   migrations/
 ```
 
 ## Environment Variables
 
-Copy the example file:
+Create the local environment file:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Required server environment:
+Required Supabase server environment:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-LINE:
+Required LINE environment:
 
 ```env
 LINE_CHANNEL_ACCESS_TOKEN=your-line-channel-access-token
@@ -201,13 +204,13 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 
 ### Receiver Account Variables
 
-`SLIP_RECEIVER_ACCOUNT_NUMBER` is the main receiver account.
+`SLIP_RECEIVER_ACCOUNT_NUMBER` is the main receiver account for bank transfer checks.
 
-`SLIP_RECEIVER_ACCOUNT_NUMBERS` is for extra bank accounts, separated by commas.
+`SLIP_RECEIVER_ACCOUNT_NUMBERS` is for additional bank receiver accounts. Use comma-separated values.
 
-`TRUEMONEY_RECEIVER_ACCOUNT_NUMBER` is checked only when the LINE payment method is `truemoney`.
+`TRUEMONEY_RECEIVER_ACCOUNT_NUMBER` is included only when the selected LINE payment method is `truemoney`.
 
-The code also includes the hardcoded PromptPay id in `src/app/api/line/webhook/route.ts` as `PROMPTPAY_ID`, because the generated bank-transfer QR depends on it.
+The webhook also includes a `PROMPTPAY_ID` constant in `src/app/api/line/webhook/route.ts`, because the bank-transfer QR payload is generated from that value.
 
 ## Local Development
 
@@ -217,7 +220,7 @@ Install dependencies:
 npm install
 ```
 
-Run the app:
+Run the development server:
 
 ```bash
 npm run dev
@@ -241,7 +244,7 @@ Build:
 npm run build
 ```
 
-If Turbopack build behavior is being investigated, a webpack build can be run manually:
+Manual webpack build check:
 
 ```bash
 npx next build --webpack
@@ -249,7 +252,7 @@ npx next build --webpack
 
 ## Supabase Setup
 
-Run migrations in numeric order from `supabase/migrations`.
+Apply migrations in numeric order from `supabase/migrations`.
 
 ```txt
 001_initial_schema.sql
@@ -282,13 +285,13 @@ Important storage:
 | Storage | Purpose |
 | --- | --- |
 | Supabase bucket `payment-slips` | Private slip images |
-| Vercel Blob | General user-uploaded images such as profile/category images |
+| Vercel Blob | General uploaded images such as profile and category images |
 
-Migration `009_add_slip_review_fields.sql` also creates or updates the `payment-slips` bucket as non-public.
+Migration `009_add_slip_review_fields.sql` creates or updates the `payment-slips` bucket as non-public.
 
 ## LINE Setup
 
-Set LINE webhook URL:
+Set the LINE webhook URL:
 
 ```txt
 https://your-production-domain.com/api/line/webhook
@@ -296,14 +299,14 @@ https://your-production-domain.com/api/line/webhook
 
 Required LINE settings:
 
-- Webhook enabled
-- `LINE_CHANNEL_SECRET` matches the Messaging API channel
-- `LINE_CHANNEL_ACCESS_TOKEN` is valid
-- Students have added the LINE Official Account
+- Webhook enabled.
+- `LINE_CHANNEL_SECRET` matches the Messaging API channel.
+- `LINE_CHANNEL_ACCESS_TOKEN` is valid.
+- Students have added the LINE Official Account.
 
 ### Rich Menu
 
-Rich menu assets live in:
+Rich menu assets:
 
 ```txt
 public/line/rich-menu-register.png
@@ -325,27 +328,27 @@ The setup route uses `LINE_CHANNEL_ACCESS_TOKEN`.
 Student sends:
 
 ```txt
-ลงทะเบียน 24
+register 24
 ```
 
-or:
+The current webhook also accepts a raw classroom number:
 
 ```txt
 24
 ```
 
-The webhook uses `event.source.userId` and stores it in `students.line_user_id`.
+The webhook reads `event.source.userId` and stores it in `students.line_user_id`.
 
 ### Pay
 
-Student taps the rich menu pay action or sends a pay command. The bot:
+The student taps the rich menu pay action or sends a pay command. The bot:
 
-1. Checks registration.
+1. Checks that the student is registered.
 2. Loads unpaid schedules for that student.
 3. Sends a LINE Flex message with large tappable buttons.
 4. Creates a `line_payment_requests` row with `status = selecting`.
-5. Stores chosen amount.
-6. Lets student select method.
+5. Stores the selected amount.
+6. Lets the student select a payment method.
 
 Supported methods:
 
@@ -357,25 +360,25 @@ cash
 
 ### Cash
 
-When student selects cash:
+When the student selects cash:
 
 ```txt
 status = cash_pending
 method = cash
 ```
 
-The request appears in the web review UI so treasurer can approve after receiving cash.
+The request appears in the web review UI so the treasurer can approve it after receiving cash.
 
 ### Bank Transfer or TrueMoney
 
-When student selects transfer or TrueMoney:
+When the student selects bank transfer or TrueMoney:
 
 ```txt
 status = awaiting_slip
 method = kplus | truemoney
 ```
 
-The bot sends fixed-amount payment instructions. The student sends an image back into the same LINE chat.
+The bot sends fixed-amount payment instructions. The student sends a slip image back in the same LINE chat.
 
 ### Cancel
 
@@ -410,10 +413,10 @@ expired
 
 Current runtime behavior:
 
-| Event | DB behavior |
+| Event | Database behavior |
 | --- | --- |
 | Start payment | Insert `line_payment_requests`, `status = selecting` |
-| Choose transfer/TrueMoney | Update to `awaiting_slip` |
+| Choose transfer or TrueMoney | Update to `awaiting_slip` |
 | Choose cash | Update to `cash_pending` |
 | Upload slip | Store image and update slip metadata |
 | Clean auto-check | Approve, create transaction, archive metadata, delete request |
@@ -428,7 +431,7 @@ There are two related but different slip-checking paths.
 
 ### Production Webhook Checker
 
-Production webhook uses:
+The production webhook uses:
 
 ```txt
 src/lib/server/slipCheck.ts
@@ -436,14 +439,14 @@ src/lib/server/slipCheck.ts
 
 It currently checks:
 
-- SHA-256 image hash
-- QR readability through `sharp` + `jsqr`
-- QR payload
-- amount if QR payload includes EMV tag `54`
-- receiver account/name if present in QR payload
-- likely slip transaction/reference id from QR payload
+- SHA-256 image hash.
+- QR readability through `sharp` and `jsqr`.
+- QR payload.
+- Amount if the QR payload includes EMV tag `54`.
+- Receiver account and receiver name if they are present in the QR payload.
+- Likely slip transaction or reference id from the QR payload.
 
-It does not currently run OCR inside the webhook helper. If the bank or TrueMoney QR does not include visible amount/account/name data, the production checker may send the slip to web review instead of auto-approving.
+The production webhook helper does not currently run OCR. If a bank or TrueMoney QR does not expose the visible amount, receiver account, or receiver name, the production checker may send the slip to web review instead of auto-approving it.
 
 ### Local Debug Checker
 
@@ -455,13 +458,13 @@ scripts/check-slip.js
 
 It checks:
 
-- QR payload
-- SHA-256 image hash
-- OCR text using `tesseract.js`
-- top-area OCR for TrueMoney slips where amount appears at the top
-- visible amount such as `80.00 บาท` or `B 80.00`
-- masked account strings like `XXX-X-X4106-x` and `09*-***-5433`
-- receiver name variants where prefixes like `ด.ช.` may be missing
+- QR payload.
+- SHA-256 image hash.
+- OCR text using `tesseract.js`.
+- Top-area OCR for TrueMoney slips where the amount appears at the top.
+- Visible amounts such as `80.00 THB`, `80.00 baht`, Thai baht text, or `B 80.00`.
+- Masked account strings such as `XXX-X-X4106-x` and `09*-***-5433`.
+- Receiver name variants where prefixes may be missing.
 
 Use this script to debug a real slip image locally:
 
@@ -469,13 +472,13 @@ Use this script to debug a real slip image locally:
 node scripts/check-slip.js ./path/to/slip.jpg 80
 ```
 
-Example with explicit receiver:
+Example with an explicit receiver:
 
 ```bash
-node scripts/check-slip.js ./path/to/slip.jpg 80 "xxx-x-x4106-x" "ด.ช. ต้นธาร ปัญโญศักดิ์"
+node scripts/check-slip.js ./path/to/slip.jpg 80 "xxx-x-x4106-x" "Receiver Name"
 ```
 
-The script prints JSON with:
+The script prints JSON similar to:
 
 ```json
 {
@@ -569,7 +572,7 @@ description = LINE payment proof URL when available
 
 ### `line_payment_slip_archives`
 
-Approved payment requests are deleted, so duplicate prevention cannot rely only on `line_payment_requests`. For that reason the app archives approved-slip metadata here.
+Approved payment requests are deleted, so duplicate prevention cannot rely only on `line_payment_requests`. For that reason, the app archives approved-slip metadata here.
 
 Archived fields include:
 
@@ -615,24 +618,24 @@ src/lib/server/linePaymentReview.ts
 
 Flow:
 
-1. Lock request by updating only reviewable statuses.
-2. Mark request approved internally.
-3. Create transaction.
+1. Lock the request by updating only reviewable statuses.
+2. Mark the request approved internally.
+3. Create a transaction.
 4. Archive approved slip metadata.
 5. Enforce approved slip image retention.
-6. Delete `line_payment_requests` row.
-7. Notify student when approval came from web review.
+6. Delete the `line_payment_requests` row.
+7. Notify the student when approval came from web review.
 
-Auto approval suppresses duplicate push notification and replies in the original webhook event instead.
+Auto approval suppresses the duplicate push notification and replies in the original webhook event instead.
 
 ### Rejection Flow
 
 Rejection does:
 
-1. Update request to rejected long enough to get a consistent row.
-2. Push LINE rejection message to student.
-3. Delete rejected slip image from Supabase Storage if it exists.
-4. Delete `line_payment_requests` row.
+1. Update the request to rejected long enough to get a consistent row.
+2. Push a LINE rejection message to the student.
+3. Delete the rejected slip image from Supabase Storage if it exists.
+4. Delete the `line_payment_requests` row.
 
 Rejected slip metadata is not archived. This is intentional so a rejected attempt does not block or pollute a later valid payment.
 
@@ -666,11 +669,11 @@ The app keeps at most 6 approved slip images per LINE user.
 
 When the user has more than 6 approved archived slips:
 
-- older image files are deleted from Supabase Storage
-- `slip_url` and `slip_pathname` are cleared in `line_payment_slip_archives`
-- duplicate-check metadata remains
+- Older image files are deleted from Supabase Storage.
+- `slip_url` and `slip_pathname` are cleared in `line_payment_slip_archives`.
+- Duplicate-check metadata remains.
 
-This keeps storage under control while preserving fraud/duplicate detection.
+This keeps storage usage under control while preserving fraud and duplicate detection.
 
 ### Rejected Slip Cleanup
 
@@ -680,26 +683,26 @@ Rejected slips are removed from storage and the request row is deleted. Rejected
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/health` | health check |
-| `GET/POST /api/students` | students API |
-| `GET/PATCH/DELETE /api/students/[id]` | single student API |
-| `GET/POST /api/schedules` | schedules API |
-| `GET/PATCH/DELETE /api/schedules/[id]` | single schedule API |
-| `GET /api/schedules/[id]/status` | schedule payment status |
-| `POST /api/schedules/[id]/reminders/line` | push LINE reminders |
-| `GET/POST /api/transactions` | transactions API |
-| `GET/PATCH/DELETE /api/transactions/[id]` | single transaction API |
-| `GET /api/transactions/balance` | balance summary |
-| `GET /api/transactions/income-by-method` | income method summary |
-| `GET/POST /api/categories` | categories API |
-| `GET/PATCH/DELETE /api/categories/[id]` | category API |
+| `GET /api/health` | Health check |
+| `GET/POST /api/students` | Students API |
+| `GET/PATCH/DELETE /api/students/[id]` | Single student API |
+| `GET/POST /api/schedules` | Schedules API |
+| `GET/PATCH/DELETE /api/schedules/[id]` | Single schedule API |
+| `GET /api/schedules/[id]/status` | Schedule payment status |
+| `POST /api/schedules/[id]/reminders/line` | Push LINE reminders |
+| `GET/POST /api/transactions` | Transactions API |
+| `GET/PATCH/DELETE /api/transactions/[id]` | Single transaction API |
+| `GET /api/transactions/balance` | Balance summary |
+| `GET /api/transactions/income-by-method` | Income method summary |
+| `GET/POST /api/categories` | Categories API |
+| `GET/PATCH/DELETE /api/categories/[id]` | Category API |
 | `POST /api/uploads` | Vercel Blob upload |
-| `GET /api/uploads/slips` | private slip image proxy |
+| `GET /api/uploads/slips` | Private slip image proxy |
 | `GET/POST /api/line/webhook` | LINE webhook |
-| `POST /api/line/rich-menu/setup` | create/link rich menus |
-| `GET /api/line/payment-requests` | list pending review requests |
-| `GET/PATCH /api/line/payment-requests/[id]` | read/update/reject request |
-| `POST /api/line/payment-requests/[id]/approve` | approve request |
+| `POST /api/line/rich-menu/setup` | Create/link rich menus |
+| `GET /api/line/payment-requests` | List pending review requests |
+| `GET/PATCH /api/line/payment-requests/[id]` | Read/update/reject request |
+| `POST /api/line/payment-requests/[id]/approve` | Approve request |
 
 ## Operational Commands
 
@@ -746,14 +749,14 @@ Recommended platform: Vercel.
 Before deployment:
 
 1. Apply all Supabase migrations.
-2. Confirm `payment-slips` bucket exists and is private.
+2. Confirm the `payment-slips` bucket exists and is private.
 3. Set all environment variables on Vercel.
-4. Deploy app.
-5. Set LINE webhook URL to production domain.
-6. Enable LINE webhook.
+4. Deploy the app.
+5. Set the LINE webhook URL to the production domain.
+6. Enable the LINE webhook.
 7. Run rich menu setup if needed.
 8. Register a test student through LINE.
-9. Test payment flow with one small schedule.
+9. Test the payment flow with one small schedule.
 10. Verify web review approval and rejection.
 
 Required production variables:
@@ -778,37 +781,37 @@ BLOB_READ_WRITE_TOKEN
 Check:
 
 - `LINE_CHANNEL_SECRET`
-- webhook URL points to the correct deployment
-- request body is not modified before signature verification
+- The webhook URL points to the correct deployment.
+- The request body is not modified before signature verification.
 
 ### LINE bot does not reply
 
 Check:
 
 - `LINE_CHANNEL_ACCESS_TOKEN`
-- webhook enabled in LINE Developers
-- Vercel function logs for `/api/line/webhook`
-- student has added the LINE Official Account
+- Webhook is enabled in LINE Developers.
+- Vercel function logs for `/api/line/webhook`.
+- The student has added the LINE Official Account.
 
 ### Student cannot pay
 
 Check:
 
-- student has `line_user_id`
-- student is included in the target schedule
-- schedule still has unpaid remaining amount
-- no active request is stuck in `pending_slip_review`
+- The student has `line_user_id`.
+- The student is included in the target schedule.
+- The schedule still has unpaid remaining amount.
+- No active request is stuck in `pending_slip_review`.
 
 ### Slip goes to review instead of auto approve
 
 Check:
 
-- QR is readable
-- QR contains enough data for production checker
-- expected amount equals selected amount
-- `SLIP_RECEIVER_ACCOUNT_NAME` is correct
-- `SLIP_RECEIVER_ACCOUNT_NUMBER` or `TRUEMONEY_RECEIVER_ACCOUNT_NUMBER` is correct
-- duplicate metadata exists in `line_payment_requests` or `line_payment_slip_archives`
+- QR is readable.
+- QR contains enough data for the production checker.
+- Expected amount equals selected amount.
+- `SLIP_RECEIVER_ACCOUNT_NAME` is correct.
+- `SLIP_RECEIVER_ACCOUNT_NUMBER` or `TRUEMONEY_RECEIVER_ACCOUNT_NUMBER` is correct.
+- Duplicate metadata exists in `line_payment_requests` or `line_payment_slip_archives`.
 
 Use:
 
@@ -823,9 +826,9 @@ The local checker is more diagnostic because it includes OCR output.
 Check:
 
 - `SUPABASE_SLIP_BUCKET`
-- Supabase Storage bucket exists
-- server has `SUPABASE_SERVICE_ROLE_KEY`
-- `slip_pathname` exists in the request row or archive row
+- Supabase Storage bucket exists.
+- Server has `SUPABASE_SERVICE_ROLE_KEY`.
+- `slip_pathname` exists in the request row or archive row.
 
 ### Approval creates duplicate payment
 
@@ -843,8 +846,8 @@ If the row is already approved or deleted, a second approval should not create a
 
 It should not. Current rejection cleanup deletes:
 
-- rejected slip image from Supabase Storage
-- rejected `line_payment_requests` row
+- The rejected slip image from Supabase Storage.
+- The rejected `line_payment_requests` row.
 
 Rejected attempts are not archived.
 
@@ -861,15 +864,15 @@ Rejected attempts are not archived.
 
 - UI-facing types in `src/types/index.ts` use camelCase.
 - Supabase/API-facing types in `src/types/supabase.ts` use snake_case.
-- DB row mapping lives in `src/lib/supabase/mappers.ts`.
-- Server-only payment/slip logic lives in `src/lib/server`.
+- Database row mapping lives in `src/lib/supabase/mappers.ts`.
+- Server-only payment and slip logic lives in `src/lib/server`.
 - Migrations are manually applied in numeric order.
 - Keep financial side effects in server routes or server helpers.
 
 ## Known Engineering Notes
 
 - `scripts/check-slip.js` uses OCR for local debugging.
-- `src/lib/server/slipCheck.ts` currently does not OCR in production webhook.
+- `src/lib/server/slipCheck.ts` currently does not OCR in the production webhook.
 - If OCR auto approval is required in production, port the OCR extraction from `scripts/check-slip.js` into a server-only helper and account for runtime cost on Vercel.
 - Some banks and TrueMoney mask account numbers. The local checker can match masked fragments, but this should be treated as weaker than full account verification.
 - `expired` remains a valid historical status in the DB constraint, but the current cancel flow deletes active pre-review requests instead of marking them expired.
