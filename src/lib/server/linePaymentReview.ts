@@ -159,6 +159,9 @@ export async function rejectLinePaymentRequest({
     "กรุณาส่งสลิปใหม่อีกครั้งได้เลย",
   ].join("\n"));
 
+  await deleteRejectedSlipImage(request.slip_pathname);
+  await deleteCompletedPaymentRequest(request.id);
+
   return request;
 }
 
@@ -225,4 +228,12 @@ async function deleteCompletedPaymentRequest(requestId: string) {
     .eq("id", requestId);
 
   if (error) throw error;
+}
+
+async function deleteRejectedSlipImage(pathname: string | undefined) {
+  if (!pathname) return;
+
+  await deleteSlipImages([pathname]).catch((error) => {
+    console.error("Failed to delete rejected slip image", error);
+  });
 }

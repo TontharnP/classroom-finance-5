@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import generatePayload from "promptpay-qr";
 import { badRequest, ok, serverError } from "@/lib/api/response";
-import { createRecord, listRecords, updateRecord, type Row } from "@/lib/supabase/server";
+import { createRecord, deleteRecord, listRecords, updateRecord, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { storeSlipImage } from "@/lib/server/slipStorage";
@@ -696,9 +696,7 @@ async function cancelActivePayment(event: LineWebhookEvent) {
     return;
   }
 
-  await Promise.all(activeRequests.map((request) =>
-    updateRecord<Row>("line_payment_requests", request.id, { status: "expired", note: "Cancelled by LINE user" }, ["status", "note"])
-  ));
+  await Promise.all(activeRequests.map((request) => deleteRecord("line_payment_requests", request.id)));
   await replyLineText(event.replyToken, [
     "ยกเลิกรายการชำระเงินให้เรียบร้อยแล้วครับ ✅",
     "รายการนี้พักก่อน",
