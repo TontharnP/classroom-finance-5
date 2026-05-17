@@ -1,5 +1,6 @@
 import { noContent, notFound, ok, serverError } from "@/lib/api/response";
 import { deleteTransactionWithSlipData } from "@/lib/server/transactionDeletion";
+import { attachSlipDataToTransaction } from "@/lib/server/transactionSlips";
 import { getRecord, updateRecord, type Row } from "@/lib/supabase/server";
 import { mapTransaction } from "@/lib/supabase/mappers";
 import type { TransactionUpdate } from "@/types/supabase";
@@ -25,7 +26,7 @@ const transactionColumns = [
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const row = await getRecord<Row>("transactions", id);
+    const row = await attachSlipDataToTransaction(await getRecord<Row>("transactions", id));
     if (!row) return notFound("Transaction not found");
     return ok(mapTransaction(row));
   } catch (error) {
@@ -37,7 +38,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     const body = (await request.json()) as TransactionUpdate;
-    const row = await updateRecord<Row>("transactions", id, body, transactionColumns);
+    const row = await attachSlipDataToTransaction(await updateRecord<Row>("transactions", id, body, transactionColumns));
     if (!row) return notFound("Transaction not found");
     return ok(mapTransaction(row));
   } catch (error) {

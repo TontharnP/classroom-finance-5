@@ -8,6 +8,7 @@ import { TxnSource, TxnKind, PaymentMethod, Transaction } from "@/types";
 import { format } from "date-fns";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { TransactionDetailModal } from "./TransactionDetailModal";
+import { TransactionSlipButton } from "./TransactionSlipButton";
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -70,6 +71,9 @@ const TransactionRow = memo(({
       </td>
       <td className="px-4 py-3">{transaction.kind === "transfer" ? "โอนย้าย" : (transaction.source === "schedule" ? "-" : (transaction.category || "-"))}</td>
       <td className="px-4 py-3 text-zinc-500">{format(new Date(transaction.createdAt), "dd/MM/yyyy HH:mm")}</td>
+      <td className="px-4 py-3 text-center">
+        <TransactionSlipButton transaction={transaction} />
+      </td>
     </tr>
   );
 });
@@ -330,14 +334,17 @@ export function TransactionsList() {
                       <div>{payer}</div>
                       <div>{format(new Date(t.createdAt), "dd/MM/yy HH:mm")}</div>
                     </div>
-                    <div
-                      className="rounded-full px-2.5 py-1 font-semibold capitalize"
-                      style={{
-                        background: t.kind === "transfer" ? "var(--primary-soft)" : "color-mix(in srgb, var(--cyan) 16%, transparent)",
-                        color: t.kind === "transfer" ? "var(--primary)" : "var(--muted-strong)",
-                      }}
-                    >
-                      {t.kind === "transfer" ? "ภายใน" : t.method}
+                    <div className="flex items-center gap-1.5">
+                      <TransactionSlipButton transaction={t} />
+                      <div
+                        className="rounded-full px-2.5 py-1 font-semibold capitalize"
+                        style={{
+                          background: t.kind === "transfer" ? "var(--primary-soft)" : "color-mix(in srgb, var(--cyan) 16%, transparent)",
+                          color: t.kind === "transfer" ? "var(--primary)" : "var(--muted-strong)",
+                        }}
+                      >
+                        {t.kind === "transfer" ? "ภายใน" : t.method}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -348,7 +355,7 @@ export function TransactionsList() {
 
         {/* Desktop View (Table) */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[780px] text-sm">
+          <table className="w-full min-w-[840px] text-sm">
             <thead className="border-b text-left" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--panel-soft) 90%, transparent)" }}>
               <tr>
                 <th className="px-4 py-3 font-medium">ชื่อรายการ</th>
@@ -357,6 +364,7 @@ export function TransactionsList() {
                 <th className="px-4 py-3 font-medium">ประเภทการชำระ</th>
                 <th className="px-4 py-3 font-medium">หมวดหมู่</th>
                 <th className="px-4 py-3 font-medium">วันที่</th>
+                <th className="px-4 py-3 text-center font-medium">สลิป</th>
               </tr>
             </thead>
             <tbody>

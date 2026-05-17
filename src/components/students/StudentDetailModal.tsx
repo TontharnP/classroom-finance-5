@@ -11,6 +11,7 @@ import type { Student } from "@/types";
 import { EditStudentModal } from "./EditStudentModal";
 import { QuickPayModal } from "../transactions/QuickPayModal";
 import { EditTransactionModal } from "../transactions/EditTransactionModal";
+import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
 import {
   deleteStudent as deleteStudentRemote,
   deleteStudentAvatar,
@@ -148,6 +149,7 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
       amount: t.amount,
       method: t.method,
       date: t.createdAt,
+      transaction: t,
     };
   });
   const editingTransaction = editingTransactionId
@@ -414,6 +416,7 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
                             <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
                               {item.amount.toLocaleString()} ฿
                             </div>
+                            <TransactionSlipButton transaction={item.transaction} />
                             <button
                               type="button"
                               onClick={() => setEditingTransactionId(item.id)}

@@ -14,6 +14,7 @@ import { toast } from "react-hot-toast";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EditScheduleModal } from "./EditScheduleModal";
 import { QuickPayModal } from "../transactions/QuickPayModal";
+import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
 
 type ScheduleDetailModalProps = {
   isOpen: boolean;
@@ -66,6 +67,17 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
       ),
     [perStudentTotals, schedule.amountPerItem]
   );
+  const latestTransactionByStudent = useMemo(() => {
+    const latest = new Map<string, (typeof scheduleTransactions)[number]>();
+    for (const transaction of scheduleTransactions) {
+      if (!transaction.studentId) continue;
+      const current = latest.get(transaction.studentId);
+      if (!current || new Date(transaction.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+        latest.set(transaction.studentId, transaction);
+      }
+    }
+    return latest;
+  }, [scheduleTransactions]);
 
   // Filter students based on status filter
   const filteredStudents = useMemo(() => {
@@ -518,6 +530,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                       const totalPaid = perStudentTotals[student.id] || 0;
                       const hasPaid = totalPaid >= schedule.amountPerItem;
                       const remain = Math.max(0, schedule.amountPerItem - totalPaid);
+                      const latestPaidTransaction = latestTransactionByStudent.get(student.id);
                       return (
                         <motion.div
                           key={student.id}
@@ -565,6 +578,9 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                               </div>
                             ) : (
                               <div className="text-sm font-medium text-rose-600 dark:text-rose-400">คลิกเพื่อชำระ</div>
+                            )}
+                            {latestPaidTransaction && (
+                              <TransactionSlipButton transaction={latestPaidTransaction} />
                             )}
                             {!hasPaid && (
                               student.lineUserId ? (

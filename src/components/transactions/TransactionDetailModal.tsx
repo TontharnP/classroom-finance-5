@@ -6,6 +6,7 @@ import type { Transaction } from "@/types";
 import { useMemo, useState } from "react";
 import { EditTransactionModal } from "./EditTransactionModal";
 import { deleteTransaction as deleteTransactionRemote } from "@/lib/supabase/transactions";
+import { TransactionSlipButton } from "./TransactionSlipButton";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -101,6 +102,11 @@ export function TransactionDetailModal({ isOpen, onClose, transaction }: Props) 
             )}
           </div>
         )}
+
+        <div className="rounded-lg border p-4 dark:border-zinc-700">
+          <div className="mb-3 text-xs uppercase tracking-wide text-zinc-500">หลักฐานการชำระเงิน</div>
+          <TransactionSlipButton transaction={transaction} label className="w-full justify-center" />
+        </div>
 
         <div className="flex gap-2">
           <button

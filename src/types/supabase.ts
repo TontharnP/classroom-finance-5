@@ -56,6 +56,8 @@ export type Transaction = {
   pocket_id?: string;
   source_pocket_id?: string;
   destination_pocket_id?: string;
+  slip_url?: string;
+  slip_pathname?: string;
 };
 
 export type LinePaymentRequestStatus =

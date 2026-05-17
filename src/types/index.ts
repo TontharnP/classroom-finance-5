@@ -76,6 +76,8 @@ export interface Transaction {
   pocketId?: string; // สำหรับระบุว่าเงินเข้ากระเป๋าไหน
   sourcePocketId?: string; // สำหรับการโอน: จากกระเป๋าไหน
   destinationPocketId?: string; // สำหรับการโอน: ไปกระเป๋าไหน
+  slipUrl?: string;
+  slipPathname?: string;
 }
 
 export interface LinePaymentRequest {

@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { Pencil } from "lucide-react";
 import { EditTransactionModal } from "../transactions/EditTransactionModal";
+import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
 
 interface Props {
     isOpen: boolean;
@@ -81,6 +82,7 @@ export function PocketTransactionsModal({ isOpen, onClose, pocket }: Props) {
                                         {t.kind === "income" || (t.kind === "transfer" && t.destinationPocketId === pocket.id) ? "+" : "-"}
                                         {t.amount.toLocaleString()} ฿
                                     </div>
+                                    <TransactionSlipButton transaction={t} />
                                     <button
                                         type="button"
                                         onClick={() => setEditingTransactionId(t.id)}

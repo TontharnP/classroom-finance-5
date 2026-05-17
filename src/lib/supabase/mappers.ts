@@ -71,6 +71,8 @@ export function mapTransaction(row: Row): Transaction {
     pocket_id: row.pocket_id ? String(row.pocket_id) : undefined,
     source_pocket_id: row.source_pocket_id ? String(row.source_pocket_id) : undefined,
     destination_pocket_id: row.destination_pocket_id ? String(row.destination_pocket_id) : undefined,
+    slip_url: row.slip_url ? String(row.slip_url) : undefined,
+    slip_pathname: row.slip_pathname ? String(row.slip_pathname) : undefined,
   };
 }
 

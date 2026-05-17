@@ -9,6 +9,7 @@ import { deleteCategory as deleteCategoryRemote, deleteCategoryIcon } from "@/li
 import type { Category } from "@/types";
 import { EditCategoryModal } from "./EditCategoryModal";
 import { EditTransactionModal } from "../transactions/EditTransactionModal";
+import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
 import { getIconComponent } from "./IconPicker";
 import toast from "react-hot-toast";
 
@@ -187,6 +188,7 @@ export function CategoryDetailModal({ isOpen, onClose, category: initialCategory
                         <p className={`font-semibold ${t.kind === "income" ? "text-emerald-600" : "text-rose-600"}`}>
                           {t.kind === "income" ? "+" : "-"}{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿
                         </p>
+                        <TransactionSlipButton transaction={t} />
                         <button
                           type="button"
                           onClick={() => setEditingTransactionId(t.id)}

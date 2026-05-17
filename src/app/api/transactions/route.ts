@@ -1,4 +1,5 @@
 import { badRequest, ok, serverError } from "@/lib/api/response";
+import { attachSlipDataToTransactions } from "@/lib/server/transactionSlips";
 import { createRecord, emptyToNull, listRecords, type Row } from "@/lib/supabase/server";
 import { mapTransaction } from "@/lib/supabase/mappers";
 import type { TransactionInput } from "@/types/supabase";
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
     }
 
     rows.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    rows = await attachSlipDataToTransactions(rows);
     return ok(rows.map(mapTransaction));
   } catch (error) {
     return serverError(error);

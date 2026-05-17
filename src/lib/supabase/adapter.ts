@@ -104,6 +104,8 @@ export function dbTransactionToTransaction(db: DbTransaction): UITransaction {
     pocketId: db.pocket_id,
     sourcePocketId: db.source_pocket_id,
     destinationPocketId: db.destination_pocket_id,
+    slipUrl: db.slip_url,
+    slipPathname: db.slip_pathname,
   };
 }
 
