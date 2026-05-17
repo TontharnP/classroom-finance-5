@@ -239,18 +239,33 @@ function ensureLocalTessdata(langText: string) {
 }
 
 function resolveTessdataPath(lang: string) {
-  const require = createRequire(import.meta.url);
-  let langPackage: { langPath: string };
-
-  if (lang === "eng") {
-    langPackage = require("@tesseract.js-data/eng") as { langPath: string };
-  } else if (lang === "tha") {
-    langPackage = require("@tesseract.js-data/tha") as { langPath: string };
-  } else {
+  if (!["eng", "tha"].includes(lang)) {
     throw new Error(`Unsupported OCR language "${lang}". Supported values are "eng" and "tha".`);
   }
 
-  return path.join(langPackage.langPath, `${lang}.traineddata.gz`);
+  const require = createRequire(import.meta.url);
+  const filename = `${lang}.traineddata.gz`;
+  const packageName = `@tesseract.js-data/${lang}`;
+  const packageDir = lang === "eng"
+    ? path.dirname(require.resolve("@tesseract.js-data/eng/package.json"))
+    : path.dirname(require.resolve("@tesseract.js-data/tha/package.json"));
+  const indexDir = lang === "eng"
+    ? path.dirname(require.resolve("@tesseract.js-data/eng"))
+    : path.dirname(require.resolve("@tesseract.js-data/tha"));
+  const candidates = [
+    path.join(process.cwd(), "node_modules", packageName, "4.0.0", filename),
+    process.env.LAMBDA_TASK_ROOT
+      ? path.join(process.env.LAMBDA_TASK_ROOT, "node_modules", packageName, "4.0.0", filename)
+      : "",
+    path.join(packageDir, "4.0.0", filename),
+    path.join(indexDir, "4.0.0", filename),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  throw new Error(`Missing OCR language data for "${lang}". Checked: ${candidates.join(", ")}`);
 }
 
 function extractEmvAmount(payload: string) {
