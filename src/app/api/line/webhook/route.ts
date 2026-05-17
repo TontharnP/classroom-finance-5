@@ -606,26 +606,22 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
   ].filter(Boolean);
   const shouldAutoRejectSlip = autoRejectReasons.length > 0;
   const autoRejectReason = autoRejectReasons.join(" • ");
-  const trueMoneyReceiptQrAllowsFallback =
+  const trueMoneyReceiptQrAllowsReceiverFallback =
     activeRequest.method === "truemoney" &&
     isTrueMoneyReceiptQrPayload(slipCheck.qrPayload) &&
-    Boolean(slipCheck.slipTransactionId) &&
-    slipCheck.amountMatches !== false;
+    Boolean(slipCheck.slipTransactionId);
   const receiverChecksConfigured = expectedReceiverAccounts.length > 0 || Boolean(expectedReceiverName);
   const receiverAllowsAutoApprove =
-    trueMoneyReceiptQrAllowsFallback ||
+    trueMoneyReceiptQrAllowsReceiverFallback ||
     (
       receiverChecksConfigured &&
       (expectedReceiverAccounts.length === 0 || slipCheck.receiverAccountMatches === true) &&
       (!expectedReceiverName || slipCheck.receiverNameMatches === true)
     );
-  const amountAllowsAutoApprove =
-    slipCheck.amountMatches === true ||
-    trueMoneyReceiptQrAllowsFallback;
   const canAutoApprove =
     slipCheck.qrReadable &&
     Boolean(slipCheck.slipTransactionId) &&
-    amountAllowsAutoApprove &&
+    slipCheck.amountMatches === true &&
     receiverAllowsAutoApprove &&
     !shouldAutoRejectSlip &&
     !duplicateSuspected;
