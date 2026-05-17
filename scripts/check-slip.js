@@ -76,14 +76,15 @@ async function main() {
 
 async function analyzeSlipImage(data, expectedAmount, options = {}) {
   const imageHash = createHash("sha256").update(data).digest("hex");
-  const [qrPayload, ocrText] = await Promise.all([
-    readQrPayload(data),
+  const expectedAccounts = normalizeExpectedAccounts(options.expectedReceiverAccounts);
+  const [qrPayloads, ocrText] = await Promise.all([
+    readQrPayloads(data),
     readOcrText(data),
   ]);
+  const qrPayload = selectSlipQrPayload(qrPayloads, expectedAccounts) || qrPayloads[0];
   const qrAmount = qrPayload ? extractEmvAmount(qrPayload) : undefined;
   const ocrAmount = extractAmountFromText(ocrText, expectedAmount);
   const detectedAmount = typeof qrAmount === "number" ? qrAmount : ocrAmount;
-  const expectedAccounts = normalizeExpectedAccounts(options.expectedReceiverAccounts);
   const expectedReceiverName = options.expectedReceiverName && options.expectedReceiverName.trim();
   const searchableText = [qrPayload, ocrText].filter(Boolean).join("\n");
   const rawDetectedReceiverName = extractReceiverNameFromText(ocrText, options.paymentMethod);
@@ -122,7 +123,32 @@ async function analyzeSlipImage(data, expectedAmount, options = {}) {
   };
 }
 
-async function readQrPayload(data) {
+async function readQrPayloads(data) {
+  const metadata = await sharp(data).rotate().metadata();
+  const buffers = [data];
+
+  if (metadata.width && metadata.height && metadata.height > metadata.width * 1.6) {
+    const sliceHeight = Math.min(metadata.height, Math.max(metadata.width, Math.round(metadata.height * 0.28)));
+    const step = Math.max(1, Math.round(sliceHeight * 0.55));
+    for (let top = 0; top < metadata.height; top += step) {
+      const height = Math.min(sliceHeight, metadata.height - top);
+      if (height < metadata.width * 0.4) continue;
+      buffers.push(
+        await sharp(data)
+          .rotate()
+          .extract({ left: 0, top, width: metadata.width, height })
+          .png()
+          .toBuffer()
+      );
+      if (top + sliceHeight >= metadata.height) break;
+    }
+  }
+
+  const payloads = await Promise.all(buffers.map(readSingleQrPayload));
+  return Array.from(new Set(payloads.filter(Boolean)));
+}
+
+async function readSingleQrPayload(data) {
   const image = await sharp(data)
     .rotate()
     .ensureAlpha()
@@ -499,6 +525,30 @@ function levenshteinDistance(a, b, maxDistance) {
   return previous[b.length];
 }
 
+function selectSlipQrPayload(payloads, expectedAccounts) {
+  if (payloads.length <= 1) return payloads[0];
+
+  return payloads
+    .map((payload, index) => {
+      const transactionId = extractSlipTransactionId(payload, expectedAccounts, extractEmvAmount(payload));
+      const score =
+        (transactionId ? 60 : 0) +
+        (/P2P/i.test(payload) ? 40 : 0) +
+        (isGeneratedPaymentQr(payload, expectedAccounts) ? -80 : 0) -
+        index;
+      return { payload, score };
+    })
+    .sort((a, b) => b.score - a.score)[0]?.payload;
+}
+
+function isGeneratedPaymentQr(payload, expectedAccounts) {
+  const payloadDigits = normalizeDigits(payload);
+  return (
+    String(payload).includes("A000000677010111") &&
+    expectedAccounts.some((account) => account.digits.length >= 4 && payloadDigits.includes(account.digits))
+  );
+}
+
 function extractSlipTransactionId(payload, expectedAccounts, amount) {
   const parsed = parseTlv(payload);
   const nodes = flattenTlv(parsed.nodes);
@@ -521,6 +571,7 @@ function isLikelyTransactionId(candidate, expectedAccounts, amount) {
   if (candidate.length < 10 || candidate.length > 80) return false;
   if (/^A0{3,}/.test(candidate)) return false;
   if (/^0+$/.test(candidate)) return false;
+  if (/5802TH6304[0-9A-F]{4}$/i.test(candidate)) return false;
 
   const candidateDigits = normalizeDigits(candidate);
   if (candidateDigits.length >= 6) {
