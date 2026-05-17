@@ -4,7 +4,7 @@ import { badRequest, ok, serverError } from "@/lib/api/response";
 import { createRecord, deleteRecord, listRecords, updateRecord, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
-import { storeSlipImage } from "@/lib/server/slipStorage";
+import { deleteSlipImages, storeSlipImage } from "@/lib/server/slipStorage";
 import { linkLineRichMenuByName } from "@/lib/server/line";
 import { approveLinePaymentRequest } from "@/lib/server/linePaymentReview";
 
@@ -688,6 +688,7 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       "รูปนี้ไม่ใช่สลิปที่ระบบตรวจสอบได้ครับ",
       "กรุณาส่งรูปสลิปโอนเงินที่เห็น QR หรือรายละเอียดการโอนชัดเจนอีกครั้ง",
     ].join("\n"));
+    await cleanupAutoRejectedPaymentRequest(activeRequest.id, proof.pathname);
     return;
   }
 
@@ -705,6 +706,15 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       "ถ้าตรวจผ่าน ระบบจะแจ้งยืนยันให้อีกครั้งนะครับ",
     ].join("\n")
   );
+}
+
+async function cleanupAutoRejectedPaymentRequest(requestId: string, slipPathname: string | undefined) {
+  await deleteRecord("line_payment_requests", requestId);
+  if (!slipPathname) return;
+
+  await deleteSlipImages([slipPathname]).catch((error) => {
+    console.error("Failed to delete auto-rejected slip image", error);
+  });
 }
 
 async function cancelActivePayment(event: LineWebhookEvent) {
