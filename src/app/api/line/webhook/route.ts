@@ -562,8 +562,14 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     expectedReceiverAccounts: getExpectedSlipReceiverAccounts(activeRequest.method),
     expectedReceiverName: process.env.SLIP_RECEIVER_ACCOUNT_NAME,
   });
-  const existingSlipRows = (await listRecords<Row>("line_payment_requests"))
-    .filter((row) => String(row.id) !== activeRequest.id);
+  const [existingRequestRows, archivedSlipRows] = await Promise.all([
+    listRecords<Row>("line_payment_requests"),
+    listRecords<Row>("line_payment_slip_archives"),
+  ]);
+  const existingSlipRows = [
+    ...existingRequestRows.filter((row) => String(row.id) !== activeRequest.id),
+    ...archivedSlipRows,
+  ];
   const duplicateByQr = Boolean(
     slipCheck.qrPayload &&
       existingSlipRows.some((row) => row.slip_qr_payload === slipCheck.qrPayload)

@@ -23,6 +23,11 @@ export async function approveLinePaymentRequest({
 
   if (existing.status === "approved" && existing.transaction_id) {
     const transaction = await getRecord<Row>("transactions", existing.transaction_id);
+    await archiveApprovedSlip(existingRow, existing.transaction_id, existing.paid_at || existing.reviewed_at || new Date().toISOString());
+    await enforceApprovedSlipRetention(existing.line_user_id).catch((error) => {
+      console.error("Failed to enforce approved slip retention", error);
+    });
+    await deleteCompletedPaymentRequest(existing.id);
     return {
       request: existing,
       transaction: transaction ? mapTransaction(transaction) : null,
@@ -96,9 +101,15 @@ export async function approveLinePaymentRequest({
 
   if (updateError) throw updateError;
 
+  const transactionId = String(transaction.id);
+  const completedRow = updatedRow || { ...lockedRow, transaction_id: transactionId };
+  await archiveApprovedSlip(completedRow, transactionId, now);
+
   await enforceApprovedSlipRetention(paymentRequest.line_user_id).catch((error) => {
     console.error("Failed to enforce approved slip retention", error);
   });
+
+  await deleteCompletedPaymentRequest(requestId);
 
   if (notifyStudent) {
     await pushLineText(paymentRequest.line_user_id, [
@@ -108,7 +119,7 @@ export async function approveLinePaymentRequest({
   }
 
   return {
-    request: mapLinePaymentRequest(updatedRow || lockedRow),
+    request: mapLinePaymentRequest(completedRow),
     transaction: mapTransaction(transaction),
   };
 }
@@ -153,11 +164,9 @@ export async function rejectLinePaymentRequest({
 
 async function enforceApprovedSlipRetention(lineUserId: string) {
   const { data, error } = await getSupabaseAdmin()
-    .from("line_payment_requests")
+    .from("line_payment_slip_archives")
     .select("id, slip_pathname")
     .eq("line_user_id", lineUserId)
-    .eq("status", "approved")
-    .eq("slip_status", "approved")
     .not("slip_pathname", "is", null)
     .order("paid_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
@@ -174,9 +183,46 @@ async function enforceApprovedSlipRetention(lineUserId: string) {
 
   const staleIds = staleRows.map((row) => String(row.id)).filter(Boolean);
   const { error: updateError } = await getSupabaseAdmin()
-    .from("line_payment_requests")
+    .from("line_payment_slip_archives")
     .update({ slip_url: null, slip_pathname: null })
     .in("id", staleIds);
 
   if (updateError) throw updateError;
+}
+
+async function archiveApprovedSlip(row: Row, transactionId: string, paidAt: string) {
+  if (!row.slip_url && !row.slip_pathname && !row.slip_qr_payload && !row.slip_image_hash && !row.slip_transaction_id) {
+    return;
+  }
+
+  const { error } = await getSupabaseAdmin()
+    .from("line_payment_slip_archives")
+    .upsert({
+      line_user_id: row.line_user_id,
+      student_id: row.student_id,
+      schedule_id: row.schedule_id,
+      transaction_id: transactionId,
+      method: row.method ?? null,
+      amount: row.amount,
+      slip_url: row.slip_url ?? null,
+      slip_pathname: row.slip_pathname ?? null,
+      slip_qr_payload: row.slip_qr_payload ?? null,
+      slip_image_hash: row.slip_image_hash ?? null,
+      slip_transaction_id: row.slip_transaction_id ?? null,
+      slip_auto_check_result: row.slip_auto_check_result ?? null,
+      paid_at: paidAt,
+    }, {
+      onConflict: "transaction_id",
+    });
+
+  if (error) throw error;
+}
+
+async function deleteCompletedPaymentRequest(requestId: string) {
+  const { error } = await getSupabaseAdmin()
+    .from("line_payment_requests")
+    .delete()
+    .eq("id", requestId);
+
+  if (error) throw error;
 }
