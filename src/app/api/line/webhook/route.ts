@@ -591,19 +591,15 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     slipCheck.receiverAccountMatches !== true &&
     slipCheck.receiverNameMatches !== true;
   const autoRejectReason = "ระบบไม่พบ QR สลิป ยอดเงิน เลขธุรกรรม หรือข้อมูลบัญชีจากรูปที่ส่งมา";
-  const requireVerifiedAmount = process.env.SLIP_AUTO_APPROVE_REQUIRE_AMOUNT === "true";
-  const requireStrictReceiver = process.env.SLIP_AUTO_APPROVE_STRICT_RECEIVER === "true";
-  const amountAllowsAutoApprove = requireVerifiedAmount
-    ? slipCheck.amountMatches === true
-    : slipCheck.amountMatches !== false;
-  const receiverAllowsAutoApprove = !requireStrictReceiver || (
+  const receiverChecksConfigured = expectedReceiverAccounts.length > 0 || Boolean(expectedReceiverName);
+  const receiverAllowsAutoApprove =
+    receiverChecksConfigured &&
     (expectedReceiverAccounts.length === 0 || slipCheck.receiverAccountMatches === true) &&
-    (!expectedReceiverName || slipCheck.receiverNameMatches === true)
-  );
+    (!expectedReceiverName || slipCheck.receiverNameMatches === true);
   const canAutoApprove =
     slipCheck.qrReadable &&
     Boolean(slipCheck.slipTransactionId) &&
-    amountAllowsAutoApprove &&
+    slipCheck.amountMatches === true &&
     receiverAllowsAutoApprove &&
     !shouldAutoRejectInvalidImage &&
     !duplicateSuspected;
@@ -1284,6 +1280,7 @@ function buildAutoCheckResult({
 
 function getExpectedSlipReceiverAccounts(method: string | undefined) {
   const configured = [
+    PROMPTPAY_ID,
     process.env.SLIP_RECEIVER_ACCOUNT_NUMBER,
     process.env.SLIP_RECEIVER_ACCOUNT_NUMBERS,
     method === "truemoney" ? process.env.TRUEMONEY_RECEIVER_ACCOUNT_NUMBER : undefined,
