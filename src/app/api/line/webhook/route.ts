@@ -558,9 +558,12 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
 
   const image = await downloadLineMessageContent(messageId);
   const imageBuffer = Buffer.from(image.data);
+  const expectedReceiverAccounts = getExpectedSlipReceiverAccounts(activeRequest.method);
+  const expectedReceiverName = process.env.SLIP_RECEIVER_ACCOUNT_NAME?.trim();
   const slipCheck = await analyzeSlipImage(imageBuffer, activeRequest.amount, {
-    expectedReceiverAccounts: getExpectedSlipReceiverAccounts(activeRequest.method),
-    expectedReceiverName: process.env.SLIP_RECEIVER_ACCOUNT_NAME,
+    expectedReceiverAccounts,
+    expectedReceiverName,
+    transactionAccountExclusions: [PROMPTPAY_ID],
   });
   const [existingRequestRows, archivedSlipRows] = await Promise.all([
     listRecords<Row>("line_payment_requests"),
@@ -580,12 +583,20 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       existingSlipRows.some((row) => String(row.slip_transaction_id || "").toUpperCase() === slipCheck.slipTransactionId)
   );
   const duplicateSuspected = duplicateByQr || duplicateByHash || duplicateByTransaction;
+  const requireVerifiedAmount = process.env.SLIP_AUTO_APPROVE_REQUIRE_AMOUNT === "true";
+  const requireStrictReceiver = process.env.SLIP_AUTO_APPROVE_STRICT_RECEIVER === "true";
+  const amountAllowsAutoApprove = requireVerifiedAmount
+    ? slipCheck.amountMatches === true
+    : slipCheck.amountMatches !== false;
+  const receiverAllowsAutoApprove = !requireStrictReceiver || (
+    (expectedReceiverAccounts.length === 0 || slipCheck.receiverAccountMatches === true) &&
+    (!expectedReceiverName || slipCheck.receiverNameMatches === true)
+  );
   const canAutoApprove =
     slipCheck.qrReadable &&
-    slipCheck.amountMatches === true &&
-    slipCheck.receiverAccountMatches === true &&
-    slipCheck.receiverNameMatches === true &&
     Boolean(slipCheck.slipTransactionId) &&
+    amountAllowsAutoApprove &&
+    receiverAllowsAutoApprove &&
     !duplicateSuspected;
   const slipStatus = duplicateSuspected
     ? "duplicate_suspected"
@@ -1229,7 +1240,11 @@ function buildAutoCheckResult({
   if (receiverAccountMatches === null) parts.push("ยังตรวจบัญชีปลายทางไม่ได้");
   if (receiverNameMatches === false) parts.push("ชื่อบัญชีปลายทางไม่ตรงกับที่ตั้งค่าไว้");
   if (receiverNameMatches === null) parts.push("ยังตรวจชื่อบัญชีปลายทางไม่ได้");
-  if (autoApproved) return "ผ่านเงื่อนไขอัตโนมัติ: ยอดตรง บัญชีตรง ชื่อตรง เลขธุรกรรมใหม่";
+  if (autoApproved) {
+    return amountMatches === true
+      ? "ผ่านเงื่อนไขอัตโนมัติ: QR ใหม่ เลขธุรกรรมใหม่ และยอดตรงกับรายการ"
+      : "ผ่านเงื่อนไขอัตโนมัติ: QR ใหม่ เลขธุรกรรมใหม่ และไม่พบสลิปซ้ำ";
+  }
   if (parts.length === 0) return "อ่าน QR ได้ ไม่พบรายการซ้ำ และยอดตรงกับรายการ";
   return parts.join(" • ");
 }
@@ -1241,7 +1256,7 @@ function getExpectedSlipReceiverAccounts(method: string | undefined) {
     method === "truemoney" ? process.env.TRUEMONEY_RECEIVER_ACCOUNT_NUMBER : undefined,
   ].flatMap((value) => splitEnvList(value));
 
-  return Array.from(new Set([...configured, PROMPTPAY_ID].filter(Boolean)));
+  return Array.from(new Set(configured.filter(Boolean)));
 }
 
 function splitEnvList(value: string | undefined) {

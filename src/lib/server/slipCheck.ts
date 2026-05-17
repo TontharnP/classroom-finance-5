@@ -26,6 +26,7 @@ export type SlipCheckResult = {
 export type SlipCheckOptions = {
   expectedReceiverAccounts?: string[];
   expectedReceiverName?: string;
+  transactionAccountExclusions?: string[];
 };
 
 export async function analyzeSlipImage(
@@ -43,6 +44,10 @@ export async function analyzeSlipImage(
   const detectedAmount = typeof qrAmount === "number" ? qrAmount : ocrAmount;
   const amountSource = typeof qrAmount === "number" ? "qr" : typeof ocrAmount === "number" ? "ocr" : null;
   const expectedAccounts = normalizeExpectedAccounts(options.expectedReceiverAccounts);
+  const transactionAccountExclusions = normalizeExpectedAccounts([
+    ...(options.expectedReceiverAccounts || []),
+    ...(options.transactionAccountExclusions || []),
+  ]);
   const expectedReceiverName = options.expectedReceiverName?.trim();
   const searchableText = [qrPayload, ocrText].filter(Boolean).join("\n");
   const amountMatches =
@@ -56,7 +61,7 @@ export async function analyzeSlipImage(
     ? containsExpectedName(searchableText, expectedReceiverName)
     : null;
   const slipTransactionId = qrPayload
-    ? extractSlipTransactionId(qrPayload, expectedAccounts, qrAmount)
+    ? extractSlipTransactionId(qrPayload, transactionAccountExclusions, qrAmount)
     : undefined;
 
   return {
