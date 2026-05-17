@@ -606,17 +606,14 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
   ].filter(Boolean);
   const shouldAutoRejectSlip = autoRejectReasons.length > 0;
   const autoRejectReason = autoRejectReasons.join(" • ");
-  const trueMoneyReceiptQrAllowsReceiverFallback =
-    activeRequest.method === "truemoney" &&
-    isTrueMoneyReceiptQrPayload(slipCheck.qrPayload) &&
-    Boolean(slipCheck.slipTransactionId);
   const receiverChecksConfigured = expectedReceiverAccounts.length > 0 || Boolean(expectedReceiverName);
   const receiverAllowsAutoApprove =
-    trueMoneyReceiptQrAllowsReceiverFallback ||
+    receiverChecksConfigured &&
     (
-      receiverChecksConfigured &&
-      (expectedReceiverAccounts.length === 0 || slipCheck.receiverAccountMatches === true) &&
-      (!expectedReceiverName || slipCheck.receiverNameMatches === true)
+      activeRequest.method === "truemoney"
+        ? (!expectedReceiverName || slipCheck.receiverNameMatches === true)
+        : (expectedReceiverAccounts.length === 0 || slipCheck.receiverAccountMatches === true) &&
+          (!expectedReceiverName || slipCheck.receiverNameMatches === true)
     );
   const canAutoApprove =
     slipCheck.qrReadable &&
@@ -1324,12 +1321,6 @@ function getExpectedSlipReceiverAccounts(method: string | undefined) {
     ].flatMap((value) => splitEnvList(value));
 
   return Array.from(new Set(configured.filter(Boolean)));
-}
-
-function isTrueMoneyReceiptQrPayload(payload: string | undefined) {
-  if (!payload) return false;
-
-  return /P2P/i.test(payload) && !payload.includes("A000000677010111");
 }
 
 function getExpectedSlipReceiverName(method: string | undefined) {
