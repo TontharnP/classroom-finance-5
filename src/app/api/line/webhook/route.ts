@@ -565,6 +565,8 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     expectedReceiverName,
     paymentMethod: activeRequest.method,
     transactionAccountExclusions: [PROMPTPAY_ID],
+    contentType: image.contentType,
+    remark: `line-payment-request:${activeRequest.id}`,
   });
   const [existingRequestRows, archivedSlipRows] = await Promise.all([
     listRecords<Row>("line_payment_requests"),
@@ -587,9 +589,10 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     slipCheck.slipTransactionId &&
       existingSlipRows.some((row) => String(row.slip_transaction_id || "").toUpperCase() === slipCheck.slipTransactionId)
   );
-  const duplicateSuspected = duplicateByQr || duplicateByHash || duplicateByTransaction;
+  const duplicateSuspected = duplicateByQr || duplicateByHash || duplicateByTransaction || slipCheck.easySlipDuplicate;
   const shouldAutoRejectInvalidImage =
     process.env.SLIP_AUTO_REJECT_INVALID_IMAGE !== "false" &&
+    !slipCheck.easySlipVerified &&
     !slipCheck.qrReadable &&
     !slipCheck.slipTransactionId &&
     slipCheck.amountMatches !== true &&
@@ -616,7 +619,7 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
           (!expectedReceiverName || slipCheck.receiverNameMatches === true)
     );
   const canAutoApprove =
-    slipCheck.qrReadable &&
+    (slipCheck.easySlipVerified || slipCheck.qrReadable) &&
     Boolean(slipCheck.slipTransactionId) &&
     slipCheck.amountMatches === true &&
     receiverAllowsAutoApprove &&
@@ -626,13 +629,14 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     ? "rejected"
     : duplicateSuspected
       ? "duplicate_suspected"
-      : !slipCheck.qrReadable || slipCheck.amountMatches === false
+      : (!slipCheck.easySlipVerified && !slipCheck.qrReadable) || slipCheck.amountMatches === false
         ? "wrong_amount"
         : "pending_slip_review";
   const autoCheckResult = buildAutoCheckResult({
     duplicateByQr,
     duplicateByHash,
     duplicateByTransaction,
+    duplicateByProvider: slipCheck.easySlipDuplicate,
     autoRejected: shouldAutoRejectSlip,
     amountMatches: slipCheck.amountMatches,
     qrReadable: slipCheck.qrReadable,
@@ -644,6 +648,8 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     detectedReceiverName: slipCheck.detectedReceiverName,
     rawDetectedReceiverName: slipCheck.rawDetectedReceiverName,
     slipTransactionId: slipCheck.slipTransactionId,
+    provider: slipCheck.provider,
+    providerError: slipCheck.easySlipError,
     autoApproved: canAutoApprove,
   });
 
@@ -1244,6 +1250,7 @@ function buildAutoCheckResult({
   duplicateByQr,
   duplicateByHash,
   duplicateByTransaction,
+  duplicateByProvider,
   autoRejected,
   amountMatches,
   qrReadable,
@@ -1255,28 +1262,36 @@ function buildAutoCheckResult({
   detectedReceiverName,
   rawDetectedReceiverName,
   slipTransactionId,
+  provider,
+  providerError,
   autoApproved,
 }: {
   duplicateByQr: boolean;
   duplicateByHash: boolean;
   duplicateByTransaction: boolean;
+  duplicateByProvider: boolean;
   autoRejected: boolean;
   amountMatches: boolean | null;
   qrReadable: boolean;
   qrAmount?: number;
   detectedAmount?: number;
-  amountSource: "qr" | "ocr" | null;
+  amountSource: "easyslip" | "qr" | "ocr" | null;
   receiverAccountMatches: boolean | null;
   receiverNameMatches: boolean | null;
   detectedReceiverName?: string;
   rawDetectedReceiverName?: string;
   slipTransactionId?: string;
+  provider: "easyslip" | "local";
+  providerError?: string;
   autoApproved: boolean;
 }) {
   const parts: string[] = [];
+  parts.push(provider === "easyslip" ? "ตรวจผ่าน EasySlip API" : "ตรวจด้วยระบบสำรองในแอป");
+  if (providerError) parts.push(`EasySlip ใช้งานไม่ได้: ${providerError}`);
   if (autoRejected) parts.push("ปฏิเสธอัตโนมัติ");
-  if (duplicateByQr || duplicateByHash || duplicateByTransaction) {
+  if (duplicateByQr || duplicateByHash || duplicateByTransaction || duplicateByProvider) {
     const source = [
+      duplicateByProvider ? "EasySlip" : "",
       duplicateByQr ? "QR" : "",
       duplicateByHash ? "รูปภาพ" : "",
       duplicateByTransaction ? "เลขธุรกรรม" : "",
@@ -1285,7 +1300,7 @@ function buildAutoCheckResult({
   }
   if (!qrReadable) parts.push("อ่าน QR จากสลิปไม่ได้");
   if (amountMatches === false) {
-    const sourceLabel = amountSource === "ocr" ? "รูปสลิป" : "QR";
+    const sourceLabel = amountSource === "easyslip" ? "EasySlip" : amountSource === "ocr" ? "รูปสลิป" : "QR";
     const checkedAmount = typeof detectedAmount === "number" ? detectedAmount : qrAmount;
     parts.push(`ยอดใน${sourceLabel}ไม่ตรง${typeof checkedAmount === "number" ? ` (${formatBaht(checkedAmount)})` : ""}`);
   }
@@ -1301,8 +1316,8 @@ function buildAutoCheckResult({
   }
   if (autoApproved) {
     return amountMatches === true
-      ? "ผ่านเงื่อนไขอัตโนมัติ: QR ใหม่ เลขธุรกรรมใหม่ และยอดตรงกับรายการ"
-      : "ผ่านเงื่อนไขอัตโนมัติ: QR ใหม่ เลขธุรกรรมใหม่ และไม่พบสลิปซ้ำ";
+      ? "ผ่านเงื่อนไขอัตโนมัติ: EasySlip/QR ใหม่ เลขธุรกรรมใหม่ และยอดตรงกับรายการ"
+      : "ผ่านเงื่อนไขอัตโนมัติ: EasySlip/QR ใหม่ เลขธุรกรรมใหม่ และไม่พบสลิปซ้ำ";
   }
   if (parts.length === 0) return "อ่าน QR ได้ ไม่พบรายการซ้ำ และยอดตรงกับรายการ";
   return parts.join(" • ");

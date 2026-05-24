@@ -190,6 +190,9 @@ Slip checking and storage:
 
 ```env
 SUPABASE_SLIP_BUCKET=payment-slips
+EASYSLIP_API_KEY=your-easyslip-api-key
+EASYSLIP_CHECK_DUPLICATE=true
+EASYSLIP_MATCH_ACCOUNT=true
 SLIP_RECEIVER_ACCOUNT_NAME=your-receiver-account-name
 SLIP_RECEIVER_ACCOUNT_NUMBER=your-main-receiver-account
 SLIP_RECEIVER_ACCOUNT_NUMBERS=optional,comma,separated,extra,accounts
@@ -216,6 +219,12 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 `TRUEMONEY_RECEIVER_ACCOUNT_NAME` overrides `SLIP_RECEIVER_ACCOUNT_NAME` for TrueMoney slip checks. If it is not set, the webhook falls back to `SLIP_RECEIVER_ACCOUNT_NAME`.
 
 `TRUEMONEY_AUTO_REJECT_RECEIVER_MISMATCH` defaults to `false`. TrueMoney receipt OCR can miss masked account/name text, so receiver mismatches block auto-approval but do not auto-reject unless this is set to `true`.
+
+`EASYSLIP_API_KEY` enables EasySlip API v2 verification for uploaded LINE slips. Without it, the app falls back to the local QR/OCR helper.
+
+`EASYSLIP_CHECK_DUPLICATE` defaults to `true` and sends EasySlip duplicate checking with each verification request.
+
+`EASYSLIP_MATCH_ACCOUNT` defaults to `true` and asks EasySlip to match against accounts registered in the EasySlip dashboard.
 
 The webhook also includes a `PROMPTPAY_ID` constant in `src/app/api/line/webhook/route.ts`, because the bank-transfer QR payload is generated from that value.
 
@@ -441,19 +450,28 @@ There are two related but different slip-checking paths.
 The production webhook uses:
 
 ```txt
+src/lib/server/easySlip.ts
 src/lib/server/slipCheck.ts
 ```
 
-It currently checks:
+It verifies LINE-uploaded slips with EasySlip API v2 when `EASYSLIP_API_KEY` is configured:
+
+- Bank slips use `POST https://api.easyslip.com/v2/verify/bank`.
+- TrueMoney slips use `POST https://api.easyslip.com/v2/verify/truewallet`.
+- Requests use multipart image upload with `matchAmount`, `matchAccount`, and `checkDuplicate`.
+- The API key is sent only from server code as a Bearer token.
+
+The local helper still runs as fallback and supporting evidence. It checks:
 
 - SHA-256 image hash.
 - QR readability through `sharp` and `jsqr`.
 - QR payload.
-- Amount if the QR payload includes EMV tag `54`.
-- Receiver account and receiver name if they are present in the QR payload.
+- OCR text using `tesseract.js`.
+- Amount from EasySlip first, then QR EMV tag `54`, then OCR fallback.
+- Receiver account and receiver name from EasySlip/QR/OCR searchable text.
 - Likely slip transaction or reference id from the QR payload.
 
-The production webhook helper does not currently run OCR. If a bank or TrueMoney QR does not expose the visible amount, receiver account, or receiver name, the production checker may send the slip to web review instead of auto-approving it.
+If EasySlip is unavailable, returns an inconclusive response, or the local fallback cannot prove the slip, the request stays in web review instead of being blindly marked as paid.
 
 ### Local Debug Checker
 
@@ -515,10 +533,12 @@ A slip is eligible for auto approval when the production checker can establish:
 
 ```txt
 QR readable
+or EasySlip verified
 amount matches expected amount
 receiver account matches configured account
 receiver name matches configured receiver name
 transaction/reference id exists
+EasySlip does not flag it as duplicated
 QR payload is not duplicated
 image hash is not duplicated
 transaction/reference id is not duplicated
@@ -774,6 +794,9 @@ SUPABASE_SERVICE_ROLE_KEY
 LINE_CHANNEL_ACCESS_TOKEN
 LINE_CHANNEL_SECRET
 SUPABASE_SLIP_BUCKET
+EASYSLIP_API_KEY
+EASYSLIP_CHECK_DUPLICATE
+EASYSLIP_MATCH_ACCOUNT
 SLIP_RECEIVER_ACCOUNT_NAME
 SLIP_RECEIVER_ACCOUNT_NUMBER
 SLIP_RECEIVER_ACCOUNT_NUMBERS

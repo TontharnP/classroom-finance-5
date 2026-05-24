@@ -7,6 +7,10 @@ import path from "path";
 import jsQR from "jsqr";
 import sharp from "sharp";
 import { recognize } from "tesseract.js";
+import { verifySlipWithEasySlip, type EasySlipVerifyData } from "@/lib/server/easySlip";
+
+const DEFAULT_OCR_MAX_VARIANTS = 10;
+const OCR_BATCH_SIZE = 2;
 
 export type SlipCheckResult = {
   imageHash: string;
@@ -15,7 +19,7 @@ export type SlipCheckResult = {
   ocrText?: string;
   ocrAmount?: number;
   detectedAmount?: number;
-  amountSource: "qr" | "ocr" | null;
+  amountSource: "easyslip" | "qr" | "ocr" | null;
   slipTransactionId?: string;
   qrReadable: boolean;
   amountMatches: boolean | null;
@@ -23,6 +27,10 @@ export type SlipCheckResult = {
   receiverNameMatches: boolean | null;
   detectedReceiverName?: string;
   rawDetectedReceiverName?: string;
+  provider: "easyslip" | "local";
+  easySlipVerified: boolean;
+  easySlipDuplicate: boolean;
+  easySlipError?: string;
 };
 
 export type SlipCheckOptions = {
@@ -30,6 +38,8 @@ export type SlipCheckOptions = {
   expectedReceiverName?: string;
   paymentMethod?: string;
   transactionAccountExclusions?: string[];
+  contentType?: string;
+  remark?: string;
 };
 
 export async function analyzeSlipImage(
@@ -43,38 +53,58 @@ export async function analyzeSlipImage(
     ...(options.expectedReceiverAccounts || []),
     ...(options.transactionAccountExclusions || []),
   ]);
-  const [qrPayloads, ocrText] = await Promise.all([
+  const [qrPayloads, easySlip] = await Promise.all([
     readQrPayloads(data),
-    readOcrText(data),
+    verifySlipWithEasySlip({
+      data,
+      contentType: options.contentType,
+      expectedAmount,
+      paymentMethod: options.paymentMethod,
+      remark: options.remark,
+    }),
   ]);
   const qrPayload = selectSlipQrPayload(qrPayloads, transactionAccountExclusions) || qrPayloads[0];
+  const easySlipData = easySlip.ok ? easySlip.data : undefined;
+  const shouldRunLocalOcr = !easySlip.ok || process.env.EASYSLIP_ALWAYS_RUN_LOCAL_OCR === "true";
+  const ocrText = shouldRunLocalOcr ? await readOcrText(data) : undefined;
+  const easySlipText = easySlipData ? stringifyEasySlipSearchText(easySlipData) : "";
+  const easySlipAmount = easySlipData ? extractEasySlipAmount(easySlipData) : undefined;
+  const easySlipPayload = easySlipData?.rawSlip?.payload;
+  const easySlipTransactionId = easySlipData ? extractEasySlipTransactionId(easySlipData) : undefined;
   const qrAmount = qrPayload ? extractEmvAmount(qrPayload) : undefined;
   const ocrAmount = extractAmountFromText(ocrText, expectedAmount);
-  const detectedAmount = typeof qrAmount === "number" ? qrAmount : ocrAmount;
-  const amountSource = typeof qrAmount === "number" ? "qr" : typeof ocrAmount === "number" ? "ocr" : null;
+  const detectedAmount = typeof easySlipAmount === "number" ? easySlipAmount : typeof qrAmount === "number" ? qrAmount : ocrAmount;
+  const amountSource = typeof easySlipAmount === "number" ? "easyslip" : typeof qrAmount === "number" ? "qr" : typeof ocrAmount === "number" ? "ocr" : null;
   const expectedReceiverName = options.expectedReceiverName?.trim();
-  const searchableText = [qrPayload, ocrText].filter(Boolean).join("\n");
-  const rawDetectedReceiverName = extractReceiverNameFromText(ocrText, options.paymentMethod);
+  const searchableText = [easySlipText, qrPayload, ocrText].filter(Boolean).join("\n");
+  const rawDetectedReceiverName = extractEasySlipReceiverName(easySlipData) || extractReceiverNameFromText(ocrText, options.paymentMethod);
   const amountMatches =
-    typeof detectedAmount === "number" && Number.isFinite(expectedAmount) && expectedAmount > 0
-      ? Math.abs(detectedAmount - expectedAmount) < 0.01
+    typeof easySlipData?.isAmountMatched === "boolean"
+      ? easySlipData.isAmountMatched
+      : typeof detectedAmount === "number" && Number.isFinite(expectedAmount) && expectedAmount > 0
+        ? Math.abs(detectedAmount - expectedAmount) < 0.01
+        : null;
+  const easySlipAccountMatched = easySlipData ? hasEasySlipMatchedAccount(easySlipData) : false;
+  const receiverAccountMatches = easySlipAccountMatched
+    ? true
+    : searchableText && expectedAccounts.length > 0
+      ? containsExpectedAccount(searchableText, expectedAccounts)
       : null;
-  const receiverAccountMatches = searchableText && expectedAccounts.length > 0
-    ? containsExpectedAccount(searchableText, expectedAccounts)
-    : null;
   const receiverNameMatches = searchableText && expectedReceiverName
     ? containsExpectedName([searchableText, rawDetectedReceiverName].filter(Boolean).join("\n"), expectedReceiverName)
     : null;
   const detectedReceiverName = receiverNameMatches === true && expectedReceiverName
     ? expectedReceiverName
     : rawDetectedReceiverName;
-  const slipTransactionId = qrPayload
-    ? extractSlipTransactionId(qrPayload, transactionAccountExclusions, qrAmount)
-    : undefined;
+  const slipTransactionId = easySlipTransactionId || (
+    qrPayload
+      ? extractSlipTransactionId(qrPayload, transactionAccountExclusions, qrAmount)
+      : undefined
+  );
 
   return {
     imageHash,
-    qrPayload,
+    qrPayload: easySlipPayload || qrPayload,
     qrAmount,
     ocrText,
     ocrAmount,
@@ -87,6 +117,10 @@ export async function analyzeSlipImage(
     receiverNameMatches,
     detectedReceiverName,
     rawDetectedReceiverName,
+    provider: easySlip.ok ? "easyslip" : "local",
+    easySlipVerified: easySlip.ok,
+    easySlipDuplicate: Boolean(easySlipData?.isDuplicate),
+    easySlipError: easySlip.ok || easySlip.provider === "none" ? undefined : `${easySlip.code || easySlip.status}: ${easySlip.message}`,
   };
 }
 
@@ -138,65 +172,19 @@ async function readOcrText(data: Buffer) {
   try {
     const lang = process.env.SLIP_OCR_LANG || "eng+tha";
     const langPath = ensureLocalTessdata(lang);
-    const metadata = await sharp(data).rotate().metadata();
-    const prepared = await sharp(data)
-      .rotate()
-      .resize({ width: 1800, withoutEnlargement: true })
-      .grayscale()
-      .normalize()
-      .sharpen()
-      .png()
-      .toBuffer();
-    const enlarged = await sharp(data)
-      .rotate()
-      .resize({ width: 2600, withoutEnlargement: false })
-      .grayscale()
-      .normalize()
-      .sharpen()
-      .png()
-      .toBuffer();
-    const topCrop = metadata.width && metadata.height
-      ? await sharp(data)
-        .rotate()
-        .extract({
-          left: 0,
-          top: 0,
-          width: metadata.width,
-          height: Math.max(1, Math.round(metadata.height * 0.28)),
-        })
-        .resize({ width: 2400 })
-        .grayscale()
-        .normalize()
-        .sharpen()
-        .png()
-        .toBuffer()
-      : undefined;
-    const middleCrop = metadata.width && metadata.height
-      ? await sharp(data)
-        .rotate()
-        .extract({
-          left: 0,
-          top: Math.max(0, Math.round(metadata.height * 0.12)),
-          width: metadata.width,
-          height: Math.max(1, Math.round(metadata.height * 0.5)),
-        })
-        .resize({ width: 2400 })
-        .grayscale()
-        .normalize()
-        .sharpen()
-        .png()
-        .toBuffer()
-      : undefined;
-    const buffers = [prepared, enlarged, topCrop, middleCrop].filter((buffer): buffer is Buffer => Boolean(buffer));
-    const results = await Promise.allSettled(
-      buffers.map((buffer) => recognize(buffer, lang, createOcrOptions(langPath)))
-    );
+    const variants = await buildOcrVariants(data);
+    const maxVariants = getOcrMaxVariants();
+    const selectedVariants = variants.slice(0, maxVariants);
+    const results = await runOcrVariants(selectedVariants, lang, langPath);
 
-    const text = results
+    const recognizedBlocks = results
       .filter((result) => result.status === "fulfilled")
-      .map((result) => result.value.data.text.trim())
-      .filter(Boolean)
-      .join("\n");
+      .map((result) => ({
+        confidence: Number(result.value.data.confidence) || 0,
+        text: result.value.data.text.trim(),
+      }))
+      .filter((result) => result.text);
+    const text = mergeOcrTextBlocks(recognizedBlocks);
 
     if (text) return text;
 
@@ -211,7 +199,174 @@ async function readOcrText(data: Buffer) {
   }
 }
 
-function createOcrOptions(langPath: string) {
+type OcrVariant = {
+  name: string;
+  buffer: Buffer;
+  psm: "4" | "6" | "11" | "12";
+};
+
+async function buildOcrVariants(data: Buffer): Promise<OcrVariant[]> {
+  const metadata = await sharp(data).rotate().metadata();
+  const variants: Array<Promise<OcrVariant | undefined>> = [
+    makeOcrVariant(data, "full-normal", "6", { width: 1800, normalize: true, sharpen: true }),
+    makeOcrVariant(data, "full-large", "6", { width: 2600, normalize: true, sharpen: true, enlarge: true }),
+    makeOcrVariant(data, "full-sparse", "11", { width: 2200, normalize: true, sharpen: true }),
+    makeOcrVariant(data, "full-threshold", "6", { width: 2200, normalize: true, sharpen: true, threshold: 172 }),
+  ];
+
+  if (metadata.width && metadata.height) {
+    variants.push(
+      makeOcrVariant(data, "top-normal", "6", {
+        crop: cropByRatio(metadata.width, metadata.height, 0, 0, 1, 0.34),
+        width: 2500,
+        normalize: true,
+        sharpen: true,
+        enlarge: true,
+      }),
+      makeOcrVariant(data, "top-threshold", "6", {
+        crop: cropByRatio(metadata.width, metadata.height, 0, 0, 1, 0.34),
+        width: 2500,
+        normalize: true,
+        sharpen: true,
+        threshold: 170,
+        enlarge: true,
+      }),
+      makeOcrVariant(data, "middle-normal", "6", {
+        crop: cropByRatio(metadata.width, metadata.height, 0, 0.12, 1, 0.58),
+        width: 2500,
+        normalize: true,
+        sharpen: true,
+        enlarge: true,
+      }),
+      makeOcrVariant(data, "middle-sparse", "11", {
+        crop: cropByRatio(metadata.width, metadata.height, 0, 0.12, 1, 0.58),
+        width: 2500,
+        normalize: true,
+        sharpen: true,
+        enlarge: true,
+      }),
+      makeOcrVariant(data, "lower-normal", "6", {
+        crop: cropByRatio(metadata.width, metadata.height, 0, 0.45, 1, 0.5),
+        width: 2400,
+        normalize: true,
+        sharpen: true,
+        enlarge: true,
+      }),
+      makeOcrVariant(data, "right-detail", "11", {
+        crop: cropByRatio(metadata.width, metadata.height, 0.28, 0, 0.72, 0.72),
+        width: 2200,
+        normalize: true,
+        sharpen: true,
+        enlarge: true,
+      })
+    );
+  }
+
+  const resolved = await Promise.all(variants);
+  return resolved.filter((variant): variant is OcrVariant => Boolean(variant));
+}
+
+type OcrImageOptions = {
+  crop?: sharp.Region;
+  width: number;
+  normalize?: boolean;
+  sharpen?: boolean;
+  threshold?: number;
+  enlarge?: boolean;
+};
+
+async function makeOcrVariant(
+  data: Buffer,
+  name: string,
+  psm: OcrVariant["psm"],
+  options: OcrImageOptions
+) {
+  try {
+    let pipeline = sharp(data).rotate();
+    if (options.crop) pipeline = pipeline.extract(options.crop);
+    pipeline = pipeline
+      .resize({ width: options.width, withoutEnlargement: !options.enlarge })
+      .grayscale();
+    if (options.normalize) pipeline = pipeline.normalize();
+    if (options.sharpen) pipeline = pipeline.sharpen({ sigma: 1.1, m1: 1.4, m2: 0.7 });
+    if (typeof options.threshold === "number") pipeline = pipeline.threshold(options.threshold);
+    const buffer = await pipeline.png().toBuffer();
+    return { name, buffer, psm };
+  } catch (error) {
+    console.error(`Failed to prepare OCR variant ${name}`, error);
+    return undefined;
+  }
+}
+
+function cropByRatio(width: number, height: number, left: number, top: number, cropWidth: number, cropHeight: number) {
+  const cropLeft = Math.max(0, Math.min(width - 1, Math.round(width * left)));
+  const cropTop = Math.max(0, Math.min(height - 1, Math.round(height * top)));
+  return {
+    left: cropLeft,
+    top: cropTop,
+    width: Math.max(1, Math.min(width - cropLeft, Math.round(width * cropWidth))),
+    height: Math.max(1, Math.min(height - cropTop, Math.round(height * cropHeight))),
+  };
+}
+
+async function runOcrVariants(variants: OcrVariant[], lang: string, langPath: string) {
+  const results: Array<PromiseSettledResult<{ data: { confidence: number; text: string } }>> = [];
+
+  for (let index = 0; index < variants.length; index += OCR_BATCH_SIZE) {
+    const batch = variants.slice(index, index + OCR_BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map((variant) => recognize(variant.buffer, lang, createOcrOptions(langPath, variant.psm)))
+    );
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
+function mergeOcrTextBlocks(blocks: Array<{ confidence: number; text: string }>) {
+  const lines = blocks
+    .sort((a, b) => b.confidence - a.confidence)
+    .flatMap((block) => block.text.split(/\r?\n/))
+    .map(cleanOcrLine)
+    .map(normalizeCommonOcrMistakes)
+    .filter(Boolean);
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const line of lines) {
+    const key = normalizeTextForSearch(line);
+    if (!key || seen.has(key)) continue;
+    if (merged.some((existing) => {
+      const existingKey = normalizeTextForSearch(existing);
+      return existingKey.length > 8 && (existingKey.includes(key) || key.includes(existingKey));
+    })) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(line);
+  }
+
+  return merged.join("\n");
+}
+
+function normalizeCommonOcrMistakes(value: string) {
+  return value
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[๐-๙]/g, (char) => String(char.charCodeAt(0) - "๐".charCodeAt(0)))
+    .replace(/[‐‑‒–—―]/g, "-")
+    .replace(/[“”]/g, "\"")
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getOcrMaxVariants() {
+  const value = Number(process.env.SLIP_OCR_MAX_VARIANTS || DEFAULT_OCR_MAX_VARIANTS);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : DEFAULT_OCR_MAX_VARIANTS;
+}
+
+function createOcrOptions(langPath: string, psm: OcrVariant["psm"] = "6") {
   const require = createRequire(import.meta.url);
 
   return {
@@ -219,6 +374,10 @@ function createOcrOptions(langPath: string) {
     langPath,
     cachePath: langPath,
     cacheMethod: "none" as const,
+    tessedit_pageseg_mode: psm,
+    tessedit_ocr_engine_mode: "1",
+    preserve_interword_spaces: "1",
+    user_defined_dpi: "300",
     logger: () => {},
   };
 }
@@ -282,9 +441,11 @@ function extractEmvAmount(payload: string) {
 function extractAmountFromText(text: string | undefined, expectedAmount: number) {
   if (!text) return undefined;
 
-  const normalizedText = text.replace(/[|]/g, " ");
+  const normalizedText = normalizeCommonOcrMistakes(text)
+    .replace(/[|]/g, " ")
+    .replace(/([0-9])\s+([0-9]{2})(?=\s*(?:บาท|฿|baht|thb))/giu, "$1.$2");
   const candidates: Array<{ value: number; score: number }> = [];
-  const amountRegex = /(?:จำนวนเงิน|ยอดเงิน|ยอด|amount|total|บาท|฿)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\s*(?:บาท|฿|baht|thb)?/giu;
+  const amountRegex = /(?:จำนวนเงิน|ยอดเงิน|ยอดโอน|ยอด|amount|total|transfer|paid|บาท|฿)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\s*(?:บาท|฿|baht|thb)?/giu;
 
   for (const match of normalizedText.matchAll(amountRegex)) {
     const value = Number(match[1].replace(/,/g, ""));
@@ -293,14 +454,74 @@ function extractAmountFromText(text: string | undefined, expectedAmount: number)
     const contextStart = Math.max(0, (match.index || 0) - 18);
     const contextEnd = Math.min(normalizedText.length, (match.index || 0) + match[0].length + 18);
     const context = normalizedText.slice(contextStart, contextEnd);
-    const amountWordScore = /จำนวนเงิน|ยอดเงิน|ยอด|amount|total|บาท|฿|baht|thb/i.test(context) ? 20 : 0;
-    const expectedScore = Number.isFinite(expectedAmount) && expectedAmount > 0 && Math.abs(value - expectedAmount) < 0.01 ? 15 : 0;
+    const amountWordScore = /จำนวนเงิน|ยอดเงิน|ยอดโอน|ยอด|amount|total|transfer|paid|บาท|฿|baht|thb/i.test(context) ? 25 : 0;
+    const expectedScore = Number.isFinite(expectedAmount) && expectedAmount > 0 && Math.abs(value - expectedAmount) < 0.01 ? 30 : 0;
+    const nearExpectedScore = Number.isFinite(expectedAmount) && expectedAmount > 0 && Math.abs(value - expectedAmount) <= 1 ? 8 : 0;
     const decimalScore = /\.[0-9]{2}/.test(match[1]) ? 4 : 0;
-    candidates.push({ value, score: amountWordScore + expectedScore + decimalScore });
+    const datePenalty = /วันที่|date|เวลา|time|[0-3]?[0-9][\/-][01]?[0-9]/i.test(context) ? -20 : 0;
+    candidates.push({ value, score: amountWordScore + expectedScore + nearExpectedScore + decimalScore + datePenalty });
   }
 
   candidates.sort((a, b) => b.score - a.score);
   return candidates[0]?.value;
+}
+
+function extractEasySlipAmount(data: EasySlipVerifyData) {
+  if (typeof data.amountInSlip === "number") return data.amountInSlip;
+
+  const rawAmount = data.rawSlip?.amount;
+  if (typeof rawAmount === "number") return rawAmount;
+  if (typeof rawAmount?.amount === "number") return rawAmount.amount;
+  if (typeof rawAmount?.local?.amount === "number") return rawAmount.local.amount;
+  return undefined;
+}
+
+function extractEasySlipTransactionId(data: EasySlipVerifyData) {
+  const value = data.rawSlip?.transRef || data.rawSlip?.transactionId;
+  return value ? cleanTransactionCandidate(value) : undefined;
+}
+
+function extractEasySlipReceiverName(data: EasySlipVerifyData | undefined) {
+  if (!data?.rawSlip?.receiver || typeof data.rawSlip.receiver !== "object") return undefined;
+  const receiver = data.rawSlip.receiver as Record<string, unknown>;
+  const account = typeof receiver.account === "object" && receiver.account
+    ? receiver.account as Record<string, unknown>
+    : undefined;
+  const name = account?.name || receiver.name;
+
+  if (typeof name === "string") return name;
+  if (typeof name === "object" && name) {
+    const names = name as Record<string, unknown>;
+    return stringValue(names.th) || stringValue(names.en);
+  }
+
+  return undefined;
+}
+
+function stringifyEasySlipSearchText(data: EasySlipVerifyData) {
+  const values = collectPrimitiveValues({
+    matchedAccount: data.matchedAccount,
+    rawSlip: data.rawSlip,
+  });
+  return values.join("\n");
+}
+
+function hasEasySlipMatchedAccount(data: EasySlipVerifyData) {
+  return Boolean(data.matchedAccount && typeof data.matchedAccount === "object");
+}
+
+function collectPrimitiveValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (typeof value === "number" || typeof value === "boolean") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap(collectPrimitiveValues);
+  if (typeof value === "object" && value) {
+    return Object.values(value as Record<string, unknown>).flatMap(collectPrimitiveValues);
+  }
+  return [];
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 type TlvNode = {
