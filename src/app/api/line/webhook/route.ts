@@ -649,6 +649,7 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     rawDetectedReceiverName: slipCheck.rawDetectedReceiverName,
     slipTransactionId: slipCheck.slipTransactionId,
     provider: slipCheck.provider,
+    providerMethod: slipCheck.easySlipMethod,
     providerError: slipCheck.easySlipError,
     autoApproved: canAutoApprove,
   });
@@ -1263,6 +1264,7 @@ function buildAutoCheckResult({
   rawDetectedReceiverName,
   slipTransactionId,
   provider,
+  providerMethod,
   providerError,
   autoApproved,
 }: {
@@ -1282,11 +1284,14 @@ function buildAutoCheckResult({
   rawDetectedReceiverName?: string;
   slipTransactionId?: string;
   provider: "easyslip" | "local";
+  providerMethod?: "payload" | "image";
   providerError?: string;
   autoApproved: boolean;
 }) {
   const parts: string[] = [];
-  parts.push(provider === "easyslip" ? "ตรวจผ่าน EasySlip API" : "ตรวจด้วยระบบสำรองในแอป");
+  parts.push(provider === "easyslip"
+    ? `ตรวจผ่าน EasySlip API${providerMethod === "payload" ? " ด้วย QR payload" : providerMethod === "image" ? " ด้วยรูปสลิป" : ""}`
+    : "ตรวจด้วยระบบสำรองในแอป");
   if (providerError) parts.push(`EasySlip ใช้งานไม่ได้: ${providerError}`);
   if (autoRejected) parts.push("ปฏิเสธอัตโนมัติ");
   if (duplicateByQr || duplicateByHash || duplicateByTransaction || duplicateByProvider) {

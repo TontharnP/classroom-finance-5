@@ -28,6 +28,7 @@ export type SlipCheckResult = {
   detectedReceiverName?: string;
   rawDetectedReceiverName?: string;
   provider: "easyslip" | "local";
+  easySlipMethod?: "payload" | "image";
   easySlipVerified: boolean;
   easySlipDuplicate: boolean;
   easySlipError?: string;
@@ -53,17 +54,16 @@ export async function analyzeSlipImage(
     ...(options.expectedReceiverAccounts || []),
     ...(options.transactionAccountExclusions || []),
   ]);
-  const [qrPayloads, easySlip] = await Promise.all([
-    readQrPayloads(data),
-    verifySlipWithEasySlip({
-      data,
-      contentType: options.contentType,
-      expectedAmount,
-      paymentMethod: options.paymentMethod,
-      remark: options.remark,
-    }),
-  ]);
+  const qrPayloads = await readQrPayloads(data);
   const qrPayload = selectSlipQrPayload(qrPayloads, transactionAccountExclusions) || qrPayloads[0];
+  const easySlip = await verifySlipWithEasySlip({
+    data,
+    contentType: options.contentType,
+    qrPayload,
+    expectedAmount,
+    paymentMethod: options.paymentMethod,
+    remark: options.remark,
+  });
   const easySlipData = easySlip.ok ? easySlip.data : undefined;
   const shouldRunLocalOcr = !easySlip.ok || process.env.EASYSLIP_ALWAYS_RUN_LOCAL_OCR === "true";
   const ocrText = shouldRunLocalOcr ? await readOcrText(data) : undefined;
@@ -118,6 +118,7 @@ export async function analyzeSlipImage(
     detectedReceiverName,
     rawDetectedReceiverName,
     provider: easySlip.ok ? "easyslip" : "local",
+    easySlipMethod: easySlip.provider === "easyslip" ? easySlip.method : undefined,
     easySlipVerified: easySlip.ok,
     easySlipDuplicate: Boolean(easySlipData?.isDuplicate),
     easySlipError: easySlip.ok || easySlip.provider === "none" ? undefined : `${easySlip.code || easySlip.status}: ${easySlip.message}`,
@@ -484,10 +485,13 @@ function extractEasySlipTransactionId(data: EasySlipVerifyData) {
 function extractEasySlipReceiverName(data: EasySlipVerifyData | undefined) {
   if (!data?.rawSlip?.receiver || typeof data.rawSlip.receiver !== "object") return undefined;
   const receiver = data.rawSlip.receiver as Record<string, unknown>;
+  const directName = stringValue(receiver.name);
+  if (directName) return directName;
+
   const account = typeof receiver.account === "object" && receiver.account
     ? receiver.account as Record<string, unknown>
     : undefined;
-  const name = account?.name || receiver.name;
+  const name = account?.name;
 
   if (typeof name === "string") return name;
   if (typeof name === "object" && name) {
