@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { TransactionsList } from "@/components/transactions/TransactionsList";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+export const metadata: Metadata = { title: "รายการเงิน | ระบบการเงินห้องเรียน" };
 
 function TransactionsListSkeleton() {
   return (

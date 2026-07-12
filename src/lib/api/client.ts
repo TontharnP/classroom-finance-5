@@ -11,6 +11,11 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     return undefined as T;
   }
 
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    throw new Error("Session expired");
+  }
+
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {

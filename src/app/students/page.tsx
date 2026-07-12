@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { StudentsGrid } from "@/components/students/StudentsGrid";
 import { StudentCardSkeleton } from "@/components/ui/Skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+export const metadata: Metadata = { title: "นักเรียน | ระบบการเงินห้องเรียน" };
 
 function StudentsGridSkeleton() {
   return (

@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ScheduleView } from "@/components/schedule/ScheduleView";
 import { ScheduleCardSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+export const metadata: Metadata = { title: "กำหนดการ | ระบบการเงินห้องเรียน" };
 
 function ScheduleViewSkeleton() {
   return (

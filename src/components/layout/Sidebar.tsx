@@ -1,11 +1,20 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/components/layout/navItems";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col items-center gap-5 overflow-hidden px-3 py-6 lg:items-stretch lg:px-4">
       <Link href="/dashboard" className="visual-gradient pressable flex h-12 w-12 items-center justify-center rounded-2xl text-xl font-black text-white shadow-lg lg:w-full lg:justify-start lg:gap-3 lg:px-4">
@@ -30,7 +39,17 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="mb-2">
+      <div className="mb-2 flex flex-col items-center gap-2 lg:items-stretch">
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="ออกจากระบบ"
+          aria-label="ออกจากระบบ"
+          className="nav-item pressable flex h-12 w-12 items-center justify-center rounded-2xl px-0 lg:w-full lg:justify-start lg:gap-3 lg:px-4"
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="hidden min-w-0 truncate text-sm font-semibold lg:inline">ออกจากระบบ</span>
+        </button>
         <ThemeToggle compact />
       </div>
     </div>

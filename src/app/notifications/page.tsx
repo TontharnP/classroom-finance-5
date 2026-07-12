@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+export const metadata: Metadata = { title: "การแจ้งเตือน | ระบบการเงินห้องเรียน" };
 
 export default function NotificationsPage() {
   return (

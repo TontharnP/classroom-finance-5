@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { DashboardOverview } from "@/components/dashboard/DashboardOverview";
 import { StatCardSkeleton, ChartSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+export const metadata: Metadata = { title: "แดชบอร์ด | ระบบการเงินห้องเรียน" };
 
 function DashboardSkeleton() {
   return (

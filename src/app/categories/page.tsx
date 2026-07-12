@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { CategoriesGrid } from "@/components/categories/CategoriesGrid";
+
+export const metadata: Metadata = { title: "หมวดหมู่ | ระบบการเงินห้องเรียน" };
 
 export default function CategoriesPage() {
   return (
