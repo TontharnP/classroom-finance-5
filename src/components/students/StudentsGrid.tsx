@@ -17,7 +17,6 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useAppStore } from "@/lib/store";
 import { sendScheduleLineReminders } from "@/lib/supabase/schedules";
@@ -83,9 +82,7 @@ const StudentCard = memo(({
   const statusTone = stats.overdueCount > 0 ? "overdue" : stats.leftTotal > 0 ? "owing" : "paid";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       onClick={selectMode ? onToggleSelect : onClick}
       className={`apple-card hover-lift group min-w-0 cursor-pointer p-3 hover:shadow-xl ${
         isSelected ? "ring-2 ring-blue-500/70" : ""
@@ -97,6 +94,8 @@ const StudentCard = memo(({
             <img
               src={student.avatarUrl}
               alt={student.firstName}
+              loading="lazy"
+              decoding="async"
               className="h-14 w-14 rounded-2xl object-cover sm:h-16 sm:w-16"
             />
           ) : (
@@ -163,7 +162,7 @@ const StudentCard = memo(({
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 StudentCard.displayName = "StudentCard";
@@ -555,15 +554,13 @@ export function StudentsGrid() {
 
       <div className="-mx-1 px-1 pb-4">
         <div className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+          <div
             onClick={() => setIsAddModalOpen(true)}
             className="apple-card hover-lift flex min-h-[160px] cursor-pointer flex-col items-center justify-center border-2 border-dashed p-3 hover:shadow-xl"
           >
             <Plus className="mb-2 h-8 w-8 text-zinc-400" />
             <div className="text-sm font-medium text-muted">เพิ่มนักเรียน</div>
-          </motion.div>
+          </div>
 
           {storeData.students.length === 0 && (
             <div className="apple-card col-span-full p-6 text-center text-muted">

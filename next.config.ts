@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  experimental: {
+    optimizePackageImports: ["recharts", "framer-motion", "date-fns"],
+  },
   outputFileTracingIncludes: {
     "/api/line/webhook": [
       "./node_modules/tesseract.js/src/**/*",

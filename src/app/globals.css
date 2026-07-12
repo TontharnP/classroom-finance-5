@@ -25,8 +25,8 @@
   --radius-panel: 26px;
   --radius-card: 18px;
   --ease-apple: cubic-bezier(0.22, 1, 0.36, 1);
-  --blur-glass: blur(26px) saturate(1.35);
-  --blur-nav: blur(22px) saturate(1.28);
+  --blur-glass: blur(18px) saturate(1.35);
+  --blur-nav: blur(16px) saturate(1.28);
 }
 
 .dark {
@@ -82,10 +82,9 @@ body {
   content: "";
   position: absolute;
   inset: -24%;
-  transform: translateZ(0);
-  filter: blur(48px);
+  transform: translate3d(0, 0, 0) rotate(3deg) scale(1.02);
+  filter: blur(36px);
   opacity: 0.72;
-  will-change: transform, opacity;
 }
 
 .ambient-bg::before {
@@ -98,11 +97,12 @@ body {
       transparent 66%,
       color-mix(in srgb, var(--primary) 18%, transparent) 78%,
       transparent 100%);
-  animation: ambientDrift 24s var(--ease-apple) infinite alternate;
 }
 
 .ambient-bg::after {
   inset: -18%;
+  transform: translate3d(-1%, -0.5%, 0) rotate(-4deg) scale(1.04);
+  opacity: 0.5;
   background:
     linear-gradient(135deg,
       transparent 10%,
@@ -110,7 +110,6 @@ body {
       transparent 56%,
       color-mix(in srgb, var(--cyan) 12%, transparent) 78%,
       transparent 100%);
-  animation: ambientFloat 30s var(--ease-apple) infinite alternate;
 }
 
 .dark .ambient-bg::before,
@@ -170,12 +169,14 @@ textarea::placeholder {
 
 .apple-card {
   border: 1px solid var(--line);
+  /* No backdrop-filter here on purpose: this class is used on every grid/list
+     item (potentially dozens on screen at once), and backdrop-filter forces
+     a continuous re-blur of whatever is behind it. Use an opaque-enough flat
+     background instead so cards stay legible without the runtime GPU cost. */
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--panel) 82%, transparent));
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 94%, transparent), color-mix(in srgb, var(--panel-solid) 84%, transparent));
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  backdrop-filter: var(--blur-glass);
-  -webkit-backdrop-filter: var(--blur-glass);
 }
 
 .apple-panel {
@@ -304,8 +305,6 @@ textarea::placeholder {
 .visual-gradient {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--primary) 88%, #ffffff 12%), #1d4ed8 46%, var(--cyan));
-  background-size: 180% 180%;
-  animation: gradientShift 18s var(--ease-apple) infinite alternate;
 }
 
 .text-muted {
@@ -603,21 +602,6 @@ nav::-webkit-scrollbar-thumb {
   border-radius: 18px;
   box-shadow: var(--shadow-float);
   animation: squareMorphRotate 1.2s var(--ease-apple) infinite;
-}
-
-@keyframes ambientDrift {
-  0% { transform: translate3d(-2%, -1%, 0) rotate(0deg) scale(1); }
-  100% { transform: translate3d(2%, 1%, 0) rotate(8deg) scale(1.04); }
-}
-
-@keyframes ambientFloat {
-  0% { transform: translate3d(2%, 1%, 0) rotate(0deg) scale(1.02); opacity: 0.5; }
-  100% { transform: translate3d(-1.5%, -1%, 0) rotate(-7deg) scale(1.06); opacity: 0.72; }
-}
-
-@keyframes gradientShift {
-  0% { background-position: 0% 20%; }
-  100% { background-position: 100% 80%; }
 }
 
 @keyframes pageEnter {
