@@ -6,6 +6,22 @@ import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { deleteSlipImages, storeSlipImage } from "@/lib/server/slipStorage";
 import { linkLineRichMenuByName } from "@/lib/server/line";
+import {
+  createFlexMessage,
+  emptyStateBox,
+  flexBubble,
+  flexButton,
+  flexHero,
+  flexSectionTitle,
+  flexText,
+  formatBaht,
+  formatDateTimeThai,
+  historyRow,
+  metricBox,
+  metricGrid,
+  paymentDebtButton,
+  type LineFlexBox,
+} from "@/lib/server/lineFlex";
 
 const PROMPTPAY_ID = "004666006046829";
 
@@ -54,9 +70,6 @@ type LineWebhookEvent = {
     id?: string;
   };
 };
-
-type LineMessage = Record<string, unknown>;
-type LineFlexBox = Record<string, unknown>;
 
 const studentColumns = ["line_user_id"];
 
@@ -375,18 +388,12 @@ function createPayMenuBubble(
 ) {
   const totalDebt = debts.reduce((sum, debt) => sum + debt.remaining, 0);
   const bodyContents: LineFlexBox[] = [
-    flexHeader("ชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`),
+    flexHero("ชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "pay"),
     flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
-    flexSeparator(),
-    {
-      type: "box",
-      layout: "horizontal",
-      spacing: "sm",
-      contents: [
-        metricBox("ยอดค้างรวม", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
-        metricBox("รายการค้าง", `${debts.length} รายการ`, "#2563EB", "#EFF6FF"),
-      ],
-    },
+    metricGrid([
+      metricBox("ยอดค้างรวม", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
+      metricBox("รายการค้าง", `${debts.length} รายการ`, "#2563EB", "#EFF6FF"),
+    ]),
   ];
 
   if (debts.length === 0) {
@@ -413,8 +420,7 @@ function createPayMenuBubble(
 function createAmountSelectionBubble(requestId: string, scheduleName: string, remaining: number) {
   const half = Math.round(remaining / 2 * 100) / 100;
   const bodyContents: LineFlexBox[] = [
-    flexHeader("เลือกจำนวนเงิน", scheduleName),
-    flexSeparator(),
+    flexHero("เลือกจำนวนเงิน", scheduleName, "pay"),
     metricBox("ยอดค้างทั้งหมด", formatBaht(remaining), "#2563EB", "#EFF6FF", "xxl"),
     flexText("แตะปุ่มจำนวนเงินที่ต้องการจ่าย หรือพิมพ์จำนวนเงินเอง", "#374151", "sm"),
     flexText("เช่น 50 หรือ 100.50", "#6B7280", "xs"),
@@ -433,8 +439,7 @@ function createAmountSelectionBubble(requestId: string, scheduleName: string, re
 
 function createPaymentMethodBubble(requestId: string, scheduleName: string, amount: number) {
   return flexBubble([
-    flexHeader("เลือกวิธีชำระเงิน", scheduleName),
-    flexSeparator(),
+    flexHero("เลือกวิธีชำระเงิน", scheduleName, "pay"),
     metricBox("ยอดค้าง", formatBaht(amount), "#2563EB", "#EFF6FF", "xxl"),
     flexText("แตะเลือกช่องทางชำระเงินจากปุ่มใหญ่ด้านล่างได้เลยครับ", "#374151", "sm"),
     flexText("ถ้าเลือกโอนหรือวอลเล็ต ระบบจะส่ง QR พร้อมยอดเงินคงที่ให้สแกน", "#6B7280", "xs"),
@@ -496,8 +501,7 @@ async function handleMethodSelection(event: LineWebhookEvent, requestId: string,
 
 function createCashPaymentBubble(amount: number) {
   return flexBubble([
-    flexHeader("รับเรื่องชำระเงินสดแล้ว", "นำเงินไปชำระกับเหรัญญิก"),
-    flexSeparator(),
+    flexHero("รับเรื่องชำระเงินสดแล้ว", "นำเงินไปชำระกับเหรัญญิก", "cash"),
     metricBox("ยอดเงิน", formatBaht(amount), "#2563EB", "#EFF6FF", "xxl"),
     flexText("เดี๋ยวเหรัญญิกยืนยันแล้วระบบจะบันทึกยอดให้เองครับ 💵", "#374151", "sm"),
   ]);
@@ -506,8 +510,7 @@ function createCashPaymentBubble(amount: number) {
 function createQrPaymentBubble(method: string, amount: number) {
   const isKplus = method === "kplus";
   return flexBubble([
-    flexHeader(isKplus ? "สแกนจ่ายผ่าน K PLUS" : "สแกนจ่ายผ่าน TrueMoney", "QR ด้านล่างล็อกยอดเงินไว้แล้ว"),
-    flexSeparator(),
+    flexHero(isKplus ? "สแกนจ่ายผ่าน K PLUS" : "สแกนจ่ายผ่าน TrueMoney", "QR ด้านล่างล็อกยอดเงินไว้แล้ว", isKplus ? "kplus" : "truemoney"),
     metricBox("ยอดเงิน", formatBaht(amount), isKplus ? "#059669" : "#EA580C", isKplus ? "#ECFDF5" : "#FFF7ED", "xxl"),
     flexText("โอนเสร็จแล้วส่งรูปสลิปกลับมาในแชทนี้ได้เลยครับ 📸", "#374151", "sm"),
     flexText("รอสลิปอยู่น้า 👀", "#6B7280", "xs"),
@@ -848,19 +851,13 @@ function normalizeTransactionMethod(transaction: ReturnType<typeof mapTransactio
 function createStudentStatusBubble(student: ReturnType<typeof mapStudent>, overview: Awaited<ReturnType<typeof getStudentPaymentOverview>>) {
   const totalDebt = overview.debts.reduce((sum, debt) => sum + debt.remaining, 0);
   const bodyContents: LineFlexBox[] = [
-    flexHeader("สถานะการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`),
+    flexHero("สถานะการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "status"),
     flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
-    flexSeparator(),
-    {
-      type: "box",
-      layout: "horizontal",
-      spacing: "sm",
-      contents: [
-        metricBox("ยอดค้าง", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
-        metricBox("ค้าง", `${overview.debts.length} รายการ`, "#EA580C", "#FFF7ED"),
-        metricBox("จ่ายแล้ว", `${overview.paidSchedules.length}/${overview.totalSchedules}`, "#059669", "#ECFDF5"),
-      ],
-    },
+    metricGrid([
+      metricBox("ยอดค้าง", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
+      metricBox("ค้าง", `${overview.debts.length} รายการ`, "#EA580C", "#FFF7ED"),
+      metricBox("จ่ายแล้ว", `${overview.paidSchedules.length}/${overview.totalSchedules}`, "#059669", "#ECFDF5"),
+    ]),
   ];
 
   if (overview.debts.length === 0) {
@@ -891,18 +888,12 @@ function createStudentHistoryBubble(
 ) {
   const totalPaid = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
   const bodyContents: LineFlexBox[] = [
-    flexHeader("ประวัติการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`),
+    flexHero("ประวัติการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "history"),
     flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
-    flexSeparator(),
-    {
-      type: "box",
-      layout: "horizontal",
-      spacing: "sm",
-      contents: [
-        metricBox("รวมที่จ่าย", formatBaht(totalPaid), "#2563EB", "#EFF6FF"),
-        metricBox("จำนวน", `${transactions.length} รายการ`, "#0891B2", "#ECFEFF"),
-      ],
-    },
+    metricGrid([
+      metricBox("รวมที่จ่าย", formatBaht(totalPaid), "#2563EB", "#EFF6FF"),
+      metricBox("จำนวน", `${transactions.length} รายการ`, "#0891B2", "#ECFEFF"),
+    ]),
   ];
 
   if (transactions.length === 0) {
@@ -911,7 +902,7 @@ function createStudentHistoryBubble(
     bodyContents.push(flexSectionTitle("ล่าสุด"));
     bodyContents.push(...transactions.slice(0, 10).map((transaction) => {
       const scheduleName = transaction.schedule_id ? scheduleById.get(transaction.schedule_id)?.name : undefined;
-      return historyRow(scheduleName || transaction.name, transaction.amount, transaction.method, transaction.created_at);
+      return historyRow(scheduleName || transaction.name, transaction.amount, formatMethod(transaction.method), transaction.created_at);
     }));
   }
 
@@ -920,181 +911,19 @@ function createStudentHistoryBubble(
 
 function createClassroomTotalBubble(summary: ReturnType<typeof calculateClassroomMoneySummary>) {
   return flexBubble([
-    flexHeader("ยอดเงินห้องเรียน", "ภาพรวมเงินทั้งหมดของห้อง"),
-    flexSeparator(),
+    flexHero("ยอดเงินห้องเรียน", "ภาพรวมเงินทั้งหมดของห้อง", "total"),
     metricBox("ยอดคงเหลือรวม", formatBaht(summary.total), "#2563EB", "#EFF6FF", "xxl"),
-    {
-      type: "box",
-      layout: "horizontal",
-      spacing: "sm",
-      contents: [
-        metricBox("K PLUS", formatBaht(summary.kplus), "#059669", "#ECFDF5"),
-        metricBox("Cash", formatBaht(summary.cash), "#2563EB", "#EFF6FF"),
-      ],
-    },
-    {
-      type: "box",
-      layout: "horizontal",
-      spacing: "sm",
-      contents: [
-        metricBox("TrueMoney", formatBaht(summary.truemoney), "#EA580C", "#FFF7ED"),
-        metricBox("รายจ่าย", formatBaht(summary.expense), "#DC2626", "#FEF2F2"),
-      ],
-    },
+    metricGrid([
+      metricBox("K PLUS", formatBaht(summary.kplus), "#059669", "#ECFDF5"),
+      metricBox("Cash", formatBaht(summary.cash), "#2563EB", "#EFF6FF"),
+    ]),
+    metricGrid([
+      metricBox("TrueMoney", formatBaht(summary.truemoney), "#EA580C", "#FFF7ED"),
+      metricBox("รายจ่าย", formatBaht(summary.expense), "#DC2626", "#FEF2F2"),
+    ]),
     metricBox("รายรับทั้งหมด", formatBaht(summary.income), "#0891B2", "#ECFEFF"),
     flexText(`อัปเดต: ${formatDateTimeThai(new Date().toISOString())}`, "#9CA3AF", "xs"),
   ]);
-}
-
-function createFlexMessage(altText: string, bubble: LineFlexBox): LineMessage {
-  return {
-    type: "flex",
-    altText: truncateLabel(altText, 390),
-    contents: bubble,
-  };
-}
-
-function flexBubble(bodyContents: LineFlexBox[]): LineFlexBox {
-  return {
-    type: "bubble",
-    size: "mega",
-    body: {
-      type: "box",
-      layout: "vertical",
-      spacing: "md",
-      paddingAll: "18px",
-      contents: bodyContents,
-    },
-  };
-}
-
-function flexHeader(title: string, subtitle: string): LineFlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    spacing: "xs",
-    contents: [
-      { type: "text", text: title, weight: "bold", size: "xl", color: "#111827" },
-      { type: "text", text: subtitle, size: "sm", color: "#4B5563", wrap: true },
-    ],
-  };
-}
-
-function metricBox(label: string, value: string, color: string, backgroundColor: string, size = "lg"): LineFlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    flex: 1,
-    paddingAll: "12px",
-    cornerRadius: "16px",
-    backgroundColor,
-    contents: [
-      { type: "text", text: label, size: "xs", color: "#6B7280", wrap: true },
-      { type: "text", text: value, size, weight: "bold", color, wrap: true },
-    ],
-  };
-}
-
-function paymentDebtButton(name: string, amount: number, dueDate: string | undefined, data: string): LineFlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    spacing: "sm",
-    paddingAll: "14px",
-    cornerRadius: "16px",
-    borderWidth: "1px",
-    borderColor: "#BFDBFE",
-    backgroundColor: "#EFF6FF",
-    action: {
-      type: "postback",
-      label: truncateLabel(`ชำระ ${name}`, 40),
-      data,
-      displayText: `ชำระ ${name}`,
-    },
-    contents: [
-      { type: "text", text: name, size: "md", weight: "bold", color: "#111827", wrap: true },
-      {
-        type: "box",
-        layout: "horizontal",
-        spacing: "sm",
-        contents: [
-          { type: "text", text: `ครบกำหนด: ${formatDateThai(dueDate)}`, size: "xs", color: "#6B7280", wrap: true, flex: 1 },
-          { type: "text", text: formatBaht(amount), size: "sm", weight: "bold", color: "#DC2626", align: "end", flex: 0 },
-        ],
-      },
-      { type: "text", text: "แตะเพื่อเลือกจ่ายรายการนี้", size: "xs", color: "#2563EB", weight: "bold", wrap: true },
-    ],
-  };
-}
-
-function historyRow(name: string, amount: number, method: string | undefined, createdAt: string): LineFlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    spacing: "xs",
-    paddingAll: "10px",
-    cornerRadius: "14px",
-    borderWidth: "1px",
-    borderColor: "#E5E7EB",
-    contents: [
-      {
-        type: "box",
-        layout: "horizontal",
-        spacing: "md",
-        contents: [
-          { type: "text", text: name, size: "sm", weight: "bold", color: "#111827", wrap: true, flex: 1 },
-          { type: "text", text: formatBaht(amount), size: "sm", weight: "bold", color: "#059669", align: "end", flex: 0 },
-        ],
-      },
-      { type: "text", text: `${formatMethod(method)} • ${formatDateTimeThai(createdAt)}`, size: "xs", color: "#6B7280", wrap: true },
-    ],
-  };
-}
-
-function flexSectionTitle(text: string): LineFlexBox {
-  return { type: "text", text, weight: "bold", size: "md", color: "#111827", margin: "md" };
-}
-
-function flexText(text: string, color: string, size: string): LineFlexBox {
-  return { type: "text", text, color, size, wrap: true };
-}
-
-function flexSeparator(): LineFlexBox {
-  return { type: "separator", color: "#E5E7EB" };
-}
-
-function flexButton(
-  text: string,
-  action: Record<string, unknown>,
-  style: "primary" | "secondary",
-  color: string
-): LineFlexBox {
-  return {
-    type: "button",
-    style,
-    height: "md",
-    color,
-    margin: "sm",
-    action: {
-      ...action,
-      label: truncateLabel(text, 40),
-    },
-  };
-}
-
-function emptyStateBox(title: string, subtitle: string): LineFlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    spacing: "xs",
-    paddingAll: "16px",
-    cornerRadius: "18px",
-    backgroundColor: "#F8FAFC",
-    contents: [
-      { type: "text", text: title, weight: "bold", size: "md", color: "#111827", align: "center", wrap: true },
-      { type: "text", text: subtitle, size: "sm", color: "#6B7280", align: "center", wrap: true },
-    ],
-  };
 }
 
 function parseRegistrationNumber(text: string) {
@@ -1280,42 +1109,11 @@ function splitEnvList(value: string | undefined) {
     .filter(Boolean);
 }
 
-function truncateLabel(label: string, maxLength: number) {
-  return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
-}
-
-function formatBaht(amount: number) {
-  return `${amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿`;
-}
-
 function formatMethod(method: string | undefined) {
   if (method === "kplus") return "K PLUS";
   if (method === "cash") return "เงินสด";
   if (method === "truemoney") return "TrueMoney";
   return "ไม่ระบุช่องทาง";
-}
-
-function formatDateThai(value: string | undefined) {
-  if (!value) return "ยังไม่ระบุ";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "ยังไม่ระบุ";
-  return date.toLocaleDateString("th-TH", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function formatDateTimeThai(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("th-TH", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function isValidLineSignature(bodyText: string, signature: string, channelSecret: string) {

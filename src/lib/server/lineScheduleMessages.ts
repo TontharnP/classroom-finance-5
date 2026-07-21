@@ -2,6 +2,18 @@ import "server-only";
 
 import { getRecord, listRecords, type Row } from "@/lib/supabase/server";
 import { mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
+import {
+  createFlexMessage,
+  flexBubble,
+  flexHero,
+  flexText,
+  formatBaht,
+  formatDateThai,
+  metricBox,
+  metricGrid,
+  type LineFlexBox,
+  type LineMessage,
+} from "@/lib/server/lineFlex";
 
 type ScheduleNoticeKind = "announcement" | "reminder";
 type NoticeStatus = "sent" | "missing_line_id" | "already_paid" | "failed";
@@ -23,9 +35,6 @@ export type ScheduleLineNoticeResult = {
   failed: number;
   recipients: ScheduleLineNoticeRecipient[];
 };
-
-type LineMessage = Record<string, unknown>;
-type FlexBox = Record<string, unknown>;
 
 export async function sendScheduleLineNotices({
   scheduleId,
@@ -127,17 +136,18 @@ function buildAnnouncementFlexMessage({
   startDate: string;
   dueDate?: string;
 }): LineMessage {
-  return createFlexMessage(`มีกำหนดการใหม่: ${scheduleName}`, [
-    flexHero("กำหนดการใหม่", "#2563EB", "#06B6D4"),
+  const bubble = flexBubble([
+    flexHero("กำหนดการใหม่", "ระบบการเงินห้องเรียน", "announcement"),
     flexText(`สวัสดีครับ ${studentName}`, "#4B5563", "sm"),
     flexTitle(scheduleName),
     metricGrid([
       metricBox("ยอดที่ต้องชำระ", formatBaht(amount), "#2563EB", "#EFF6FF"),
-      metricBox("ครบกำหนด", formatThaiDate(dueDate), "#EA580C", "#FFF7ED"),
+      metricBox("ครบกำหนด", formatDateThai(dueDate), "#EA580C", "#FFF7ED"),
     ]),
-    flexText(`เริ่มเก็บตั้งแต่: ${formatThaiDate(startDate)}`, "#6B7280", "sm"),
+    flexText(`เริ่มเก็บตั้งแต่: ${formatDateThai(startDate)}`, "#6B7280", "sm"),
     flexText("กดเมนู ชำระเงิน แล้วเลือกช่องทางที่สะดวกได้เลยครับ 💸", "#374151", "sm"),
   ]);
+  return createFlexMessage(`มีกำหนดการใหม่: ${scheduleName}`, bubble);
 }
 
 function buildReminderFlexMessage({
@@ -151,94 +161,21 @@ function buildReminderFlexMessage({
   remaining: number;
   dueDate?: string;
 }): LineMessage {
-  return createFlexMessage(`แจ้งเตือนชำระเงิน: ${scheduleName}`, [
-    flexHero("แจ้งเตือนชำระเงิน", "#EA580C", "#2563EB"),
+  const bubble = flexBubble([
+    flexHero("แจ้งเตือนชำระเงิน", "ระบบการเงินห้องเรียน", "reminder"),
     flexText(`สวัสดีครับ ${studentName}`, "#4B5563", "sm"),
     flexTitle(scheduleName),
     metricGrid([
       metricBox("ยอดค้างชำระ", formatBaht(remaining), "#DC2626", "#FEF2F2"),
-      metricBox("ครบกำหนด", formatThaiDate(dueDate), "#EA580C", "#FFF7ED"),
+      metricBox("ครบกำหนด", formatDateThai(dueDate), "#EA580C", "#FFF7ED"),
     ]),
     flexText("ใกล้ครบกำหนดแล้วนะครับ อย่าลืมชำระด้วยนะ ขอบคุณครับ 🙏", "#374151", "sm"),
   ]);
+  return createFlexMessage(`แจ้งเตือนชำระเงิน: ${scheduleName}`, bubble);
 }
 
-function createFlexMessage(altText: string, bodyContents: FlexBox[]): LineMessage {
-  return {
-    type: "flex",
-    altText: truncate(altText, 390),
-    contents: {
-      type: "bubble",
-      size: "mega",
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
-        paddingAll: "18px",
-        contents: bodyContents,
-      },
-    },
-  };
-}
-
-function flexHero(text: string, from: string, to: string): FlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    paddingAll: "16px",
-    cornerRadius: "20px",
-    backgroundColor: from,
-    borderWidth: "1px",
-    borderColor: to,
-    contents: [
-      { type: "text", text, weight: "bold", size: "xl", color: "#FFFFFF" },
-      { type: "text", text: "ระบบการเงินห้องเรียน", size: "xs", color: "#DBEAFE" },
-    ],
-  };
-}
-
-function flexTitle(text: string): FlexBox {
+function flexTitle(text: string): LineFlexBox {
   return { type: "text", text, weight: "bold", size: "lg", color: "#111827", wrap: true };
-}
-
-function flexText(text: string, color: string, size: string): FlexBox {
-  return { type: "text", text, color, size, wrap: true };
-}
-
-function metricGrid(contents: FlexBox[]): FlexBox {
-  return { type: "box", layout: "horizontal", spacing: "sm", contents };
-}
-
-function metricBox(label: string, value: string, color: string, backgroundColor: string): FlexBox {
-  return {
-    type: "box",
-    layout: "vertical",
-    flex: 1,
-    paddingAll: "12px",
-    cornerRadius: "16px",
-    backgroundColor,
-    contents: [
-      { type: "text", text: label, size: "xs", color: "#6B7280", wrap: true },
-      { type: "text", text: value, size: "md", weight: "bold", color, wrap: true },
-    ],
-  };
-}
-
-function formatBaht(amount: number) {
-  return `${amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿`;
-}
-
-function formatThaiDate(date: string | undefined) {
-  if (!date) return "ยังไม่ระบุ";
-  return new Intl.DateTimeFormat("th-TH", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(`${date}T00:00:00`));
-}
-
-function truncate(text: string, maxLength: number) {
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
 async function pushLineMessage({ token, to, messages }: { token: string; to: string; messages: LineMessage[] }) {
