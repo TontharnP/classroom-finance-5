@@ -6,7 +6,6 @@ import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { deleteSlipImages, storeSlipImage } from "@/lib/server/slipStorage";
 import { linkLineRichMenuByName } from "@/lib/server/line";
-import { approveLinePaymentRequest } from "@/lib/server/linePaymentReview";
 
 const PROMPTPAY_ID = "004666006046829";
 
@@ -609,22 +608,6 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
   ].filter(Boolean);
   const shouldAutoRejectSlip = autoRejectReasons.length > 0;
   const autoRejectReason = autoRejectReasons.join(" • ");
-  const receiverChecksConfigured = expectedReceiverAccounts.length > 0 || Boolean(expectedReceiverName);
-  const receiverAllowsAutoApprove =
-    receiverChecksConfigured &&
-    (
-      activeRequest.method === "truemoney"
-        ? (!expectedReceiverName || slipCheck.receiverNameMatches === true)
-        : (expectedReceiverAccounts.length === 0 || slipCheck.receiverAccountMatches === true) &&
-          (!expectedReceiverName || slipCheck.receiverNameMatches === true)
-    );
-  const canAutoApprove =
-    (slipCheck.easySlipVerified || slipCheck.qrReadable) &&
-    Boolean(slipCheck.slipTransactionId) &&
-    slipCheck.amountMatches === true &&
-    receiverAllowsAutoApprove &&
-    !shouldAutoRejectSlip &&
-    !duplicateSuspected;
   const slipStatus = shouldAutoRejectSlip
     ? "rejected"
     : duplicateSuspected
@@ -651,7 +634,6 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     provider: slipCheck.provider,
     providerMethod: slipCheck.easySlipMethod,
     providerError: slipCheck.easySlipError,
-    autoApproved: canAutoApprove,
   });
 
   const proof = await storeSlipImage({
@@ -692,20 +674,6 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       "reviewed_at",
     ]
   );
-
-  if (canAutoApprove) {
-    await approveLinePaymentRequest({
-      requestId: activeRequest.id,
-      reviewerLineUserId: "system-auto-slip",
-      notifyStudent: false,
-    });
-    await replyLineText(event.replyToken, [
-      "สลิปผ่านแล้วครับ ✅",
-      "ระบบตรวจสอบสลิปอัตโนมัติเรียบร้อย",
-      "ชำระเงินเรียบร้อย ขอบคุณมากครับ 🙌",
-    ].join("\n"));
-    return;
-  }
 
   if (shouldAutoRejectSlip) {
     await replyLineText(event.replyToken, [
@@ -1266,7 +1234,6 @@ function buildAutoCheckResult({
   provider,
   providerMethod,
   providerError,
-  autoApproved,
 }: {
   duplicateByQr: boolean;
   duplicateByHash: boolean;
@@ -1286,7 +1253,6 @@ function buildAutoCheckResult({
   provider: "easyslip" | "local";
   providerMethod?: "payload" | "image";
   providerError?: string;
-  autoApproved: boolean;
 }) {
   const parts: string[] = [];
   parts.push(provider === "easyslip"
@@ -1318,11 +1284,6 @@ function buildAutoCheckResult({
   if (detectedReceiverName) parts.push(`ชื่อที่อ่านได้: ${detectedReceiverName}`);
   if (rawDetectedReceiverName && rawDetectedReceiverName !== detectedReceiverName) {
     parts.push(`OCR อ่านเป็น: ${rawDetectedReceiverName}`);
-  }
-  if (autoApproved) {
-    return amountMatches === true
-      ? "ผ่านเงื่อนไขอัตโนมัติ: EasySlip/QR ใหม่ เลขธุรกรรมใหม่ และยอดตรงกับรายการ"
-      : "ผ่านเงื่อนไขอัตโนมัติ: EasySlip/QR ใหม่ เลขธุรกรรมใหม่ และไม่พบสลิปซ้ำ";
   }
   if (parts.length === 0) return "อ่าน QR ได้ ไม่พบรายการซ้ำ และยอดตรงกับรายการ";
   return parts.join(" • ");

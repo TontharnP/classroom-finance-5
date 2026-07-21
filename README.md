@@ -88,8 +88,8 @@ The app is intentionally conservative around payment correctness. QR, image hash
 - Downloads slip images from the LINE Content API.
 - Uploads slip images to Supabase Storage.
 - Performs production slip helper checks.
-- Auto-approves only when the production checker has enough evidence.
-- Sends suspicious or incomplete slips to web review.
+- Always sends checked slips to web review for a treasurer to approve or reject.
+- Auto-rejects duplicates and slips with no usable evidence (no QR, no EasySlip verification, no transaction id, no matching data) or a clear mismatch.
 
 ## Tech Stack
 
@@ -218,7 +218,7 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 
 `TRUEMONEY_RECEIVER_ACCOUNT_NAME` overrides `SLIP_RECEIVER_ACCOUNT_NAME` for TrueMoney slip checks. If it is not set, the webhook falls back to `SLIP_RECEIVER_ACCOUNT_NAME`.
 
-`TRUEMONEY_AUTO_REJECT_RECEIVER_MISMATCH` defaults to `false`. TrueMoney receipt OCR can miss masked account/name text, so receiver mismatches block auto-approval but do not auto-reject unless this is set to `true`.
+`TRUEMONEY_AUTO_REJECT_RECEIVER_MISMATCH` defaults to `false`. TrueMoney receipt OCR can miss masked account/name text, so a receiver mismatch just leaves the slip in `pending_slip_review` rather than auto-rejecting it, unless this is set to `true`.
 
 `EASYSLIP_API_KEY` enables EasySlip API v2 verification for uploaded LINE slips. Without it, the app falls back to the local QR/OCR helper.
 
@@ -435,8 +435,8 @@ Current runtime behavior:
 | Choose transfer or TrueMoney | Update to `awaiting_slip` |
 | Choose cash | Update to `cash_pending` |
 | Upload slip | Store image and update slip metadata |
-| Clean auto-check | Approve, create transaction, archive metadata, delete request |
-| Suspicious auto-check | Keep request as `pending_slip_review` |
+| Duplicate or invalid auto-check | Reject, delete slip image, delete request |
+| Any other auto-check | Keep request as `pending_slip_review` for manual review |
 | Web approve | Create transaction, archive metadata, delete request |
 | Web reject | Push rejection, delete slip image, delete request |
 | Student cancel before review | Delete request |
@@ -527,24 +527,16 @@ The script prints JSON similar to:
 }
 ```
 
-### Auto Approval Conditions
+### No Automatic Approval
 
-A slip is eligible for auto approval when the production checker can establish:
+The app never auto-approves a slip. A locally-decoded QR payload or OCR text is not cryptographic proof of a real bank transfer — it's just a string the app parsed out of an image, and can't be trusted on its own to move money. Even when EasySlip verifies a slip, the request is still left in `pending_slip_review` for a treasurer to confirm before a `transactions` row is created.
 
-```txt
-QR readable
-or EasySlip verified
-amount matches expected amount
-receiver account matches configured account
-receiver name matches configured receiver name
-transaction/reference id exists
-EasySlip does not flag it as duplicated
-QR payload is not duplicated
-image hash is not duplicated
-transaction/reference id is not duplicated
-```
+The production checker only automates two outcomes, both rejections:
 
-If any required data is missing or suspicious, the request stays pending for web review.
+- **Duplicate**: same QR payload, image hash, or transaction id as an existing pending request or an archived approved slip, or EasySlip's own duplicate flag → `duplicate_suspected`, kept for manual review (not deleted).
+- **Invalid/mismatched**: no QR, no EasySlip verification, no transaction id, and no matching amount/account/name at all, or (optionally, per `SLIP_AUTO_REJECT_INVALID_IMAGE`/`TRUEMONEY_AUTO_REJECT_RECEIVER_MISMATCH`) a confirmed amount or receiver mismatch → auto-rejected, request and slip image deleted.
+
+Everything else — including a slip that looks completely clean — stays `pending_slip_review` and requires a treasurer to approve it from the web app.
 
 ## Database Integration
 
@@ -652,8 +644,6 @@ Flow:
 5. Enforce approved slip image retention.
 6. Delete the `line_payment_requests` row.
 7. Notify the student when approval came from web review.
-
-Auto approval suppresses the duplicate push notification and replies in the original webhook event instead.
 
 ### Rejection Flow
 
@@ -832,9 +822,9 @@ Check:
 - The schedule still has unpaid remaining amount.
 - No active request is stuck in `pending_slip_review`.
 
-### Slip goes to review instead of auto approve
+### Slip is unexpectedly auto-rejected
 
-Check:
+Every valid slip should land in `pending_slip_review` for manual approval; auto-rejection should only fire for duplicates or genuinely unreadable/mismatched slips. If a real slip gets auto-rejected, check:
 
 - QR is readable.
 - QR contains enough data for the production checker.
@@ -842,6 +832,7 @@ Check:
 - `SLIP_RECEIVER_ACCOUNT_NAME` is correct.
 - `SLIP_RECEIVER_ACCOUNT_NUMBER` or `TRUEMONEY_RECEIVER_ACCOUNT_NUMBER` is correct.
 - Duplicate metadata exists in `line_payment_requests` or `line_payment_slip_archives`.
+- `SLIP_AUTO_REJECT_INVALID_IMAGE` / `TRUEMONEY_AUTO_REJECT_RECEIVER_MISMATCH` are set as intended.
 
 Use:
 
@@ -902,8 +893,7 @@ Rejected attempts are not archived.
 ## Known Engineering Notes
 
 - `scripts/check-slip.js` uses OCR for local debugging.
-- `src/lib/server/slipCheck.ts` currently does not OCR in the production webhook.
-- If OCR auto approval is required in production, port the OCR extraction from `scripts/check-slip.js` into a server-only helper and account for runtime cost on Vercel.
+- The production webhook (`src/lib/server/slipCheck.ts`) never auto-approves a slip, by design: locally-decoded QR/OCR content isn't cryptographic proof of a real transfer, so it's only ever used to auto-reject duplicates/invalid slips or to give the treasurer supporting evidence in manual review.
 - Some banks and TrueMoney mask account numbers. The local checker can match masked fragments, but this should be treated as weaker than full account verification.
 - `expired` remains a valid historical status in the DB constraint, but the current cancel flow deletes active pre-review requests instead of marking them expired.
 
