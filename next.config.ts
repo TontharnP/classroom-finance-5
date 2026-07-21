@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["recharts", "framer-motion", "date-fns"],
   },
+  serverExternalPackages: ["tesseract.js", "tesseract.js-core"],
   outputFileTracingIncludes: {
     "/api/line/webhook": [
       "./node_modules/tesseract.js/src/**/*",
