@@ -129,14 +129,14 @@ function buildAnnouncementFlexMessage({
 }): LineMessage {
   return createFlexMessage(`มีกำหนดการใหม่: ${scheduleName}`, [
     flexHero("กำหนดการใหม่", "#2563EB", "#06B6D4"),
-    flexText(`เรียน ${studentName}`, "#4B5563", "sm"),
+    flexText(`สวัสดีครับ ${studentName}`, "#4B5563", "sm"),
     flexTitle(scheduleName),
     metricGrid([
       metricBox("ยอดที่ต้องชำระ", formatBaht(amount), "#2563EB", "#EFF6FF"),
       metricBox("ครบกำหนด", formatThaiDate(dueDate), "#EA580C", "#FFF7ED"),
     ]),
-    flexText(`เริ่ม: ${formatThaiDate(startDate)}`, "#6B7280", "sm"),
-    flexText("กดเมนู ชำระเงิน เมื่อต้องการดูรายการและเลือกช่องทางจ่ายได้เลยครับ 💸", "#374151", "sm"),
+    flexText(`เริ่มเก็บตั้งแต่: ${formatThaiDate(startDate)}`, "#6B7280", "sm"),
+    flexText("กดเมนู ชำระเงิน แล้วเลือกช่องทางที่สะดวกได้เลยครับ 💸", "#374151", "sm"),
   ]);
 }
 
@@ -153,13 +153,13 @@ function buildReminderFlexMessage({
 }): LineMessage {
   return createFlexMessage(`แจ้งเตือนชำระเงิน: ${scheduleName}`, [
     flexHero("แจ้งเตือนชำระเงิน", "#EA580C", "#2563EB"),
-    flexText(`เรียน ${studentName}`, "#4B5563", "sm"),
+    flexText(`สวัสดีครับ ${studentName}`, "#4B5563", "sm"),
     flexTitle(scheduleName),
     metricGrid([
       metricBox("ยอดค้างชำระ", formatBaht(remaining), "#DC2626", "#FEF2F2"),
       metricBox("ครบกำหนด", formatThaiDate(dueDate), "#EA580C", "#FFF7ED"),
     ]),
-    flexText("อย่าลืมชำระเงินตามกำหนดนะครับ ขอบคุณครับ/ค่ะ 🙏", "#374151", "sm"),
+    flexText("ใกล้ครบกำหนดแล้วนะครับ อย่าลืมชำระด้วยนะ ขอบคุณครับ 🙏", "#374151", "sm"),
   ]);
 }
 

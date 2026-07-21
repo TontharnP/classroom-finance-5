@@ -112,10 +112,7 @@ export async function approveLinePaymentRequest({
   await deleteCompletedPaymentRequest(requestId);
 
   if (notifyStudent) {
-    await pushLineText(paymentRequest.line_user_id, [
-      "สลิปผ่านแล้วครับ ✅",
-      "ชำระเงินเรียบร้อย ขอบคุณมากครับ 🙌",
-    ].join("\n"));
+    await pushLineText(paymentRequest.line_user_id, "เหรัญญิกตรวจสลิปผ่านแล้วครับ ✅ ขอบคุณมากนะครับ 🙌");
   }
 
   return {
@@ -133,7 +130,7 @@ export async function rejectLinePaymentRequest({
   reviewerLineUserId: string;
   reason: string;
 }) {
-  const cleanReason = reason.trim() || "เหรัญญิกยังไม่สามารถตรวจสอบสลิปนี้ได้";
+  const cleanReason = reason.trim() || "เหรัญญิกตรวจสอบสลิปนี้ไม่ผ่านครับ";
   const now = new Date().toISOString();
   const { data, error } = await getSupabaseAdmin()
     .from("line_payment_requests")
@@ -154,9 +151,9 @@ export async function rejectLinePaymentRequest({
 
   const request = mapLinePaymentRequest(data);
   await pushLineText(request.line_user_id, [
-    "สลิปยังไม่ผ่านการตรวจสอบนะครับ 😅",
-    `เหตุผล: ${cleanReason}`,
-    "กรุณาส่งสลิปใหม่อีกครั้งได้เลย",
+    "สลิปนี้ยังผ่านไม่ได้นะครับ 😅",
+    cleanReason,
+    "ลองส่งสลิปใหม่มาอีกทีได้เลยครับ",
   ].join("\n"));
 
   await deleteRejectedSlipImage(request.slip_pathname);
