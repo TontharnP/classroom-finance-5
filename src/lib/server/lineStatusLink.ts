@@ -22,7 +22,7 @@ function getAppUrl() {
   return vercelUrl ? `https://${vercelUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}` : undefined;
 }
 
-export function createLineStatusUrl(lineUserId: string) {
+function createLinePortalUrl(lineUserId: string, path: "/line-status" | "/line-history") {
   const secret = getSigningSecret();
   const appUrl = getAppUrl();
   if (!secret || !appUrl || !lineUserId) return undefined;
@@ -30,7 +30,15 @@ export function createLineStatusUrl(lineUserId: string) {
   const payload: StatusLinkPayload = { userId: lineUserId, expiresAt: Date.now() + STATUS_LINK_TTL_MS };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const token = `${encodedPayload}.${sign(encodedPayload, secret)}`;
-  return `${appUrl}/line-status?token=${encodeURIComponent(token)}`;
+  return `${appUrl}${path}?token=${encodeURIComponent(token)}`;
+}
+
+export function createLineStatusUrl(lineUserId: string) {
+  return createLinePortalUrl(lineUserId, "/line-status");
+}
+
+export function createLineHistoryUrl(lineUserId: string) {
+  return createLinePortalUrl(lineUserId, "/line-history");
 }
 
 export function verifyLineStatusToken(token: string | undefined): StatusLinkPayload | null {

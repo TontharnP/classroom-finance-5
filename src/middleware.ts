@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/line/webhook",
   "/line-status",
+  "/line-history",
   "/api/health",
   "/api/cron/keep-alive",
 ];

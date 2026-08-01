@@ -6,7 +6,7 @@ import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { deleteSlipImages, storeSlipImage } from "@/lib/server/slipStorage";
 import { linkLineRichMenuByName } from "@/lib/server/line";
-import { createLineStatusUrl } from "@/lib/server/lineStatusLink";
+import { createLineHistoryUrl, createLineStatusUrl } from "@/lib/server/lineStatusLink";
 import {
   createFlexMessage,
   emptyStateBox,
@@ -17,7 +17,6 @@ import {
   flexText,
   formatBaht,
   formatDateTimeThai,
-  historyRow,
   metricBox,
   metricGrid,
   paymentDebtButton,
@@ -721,25 +720,17 @@ async function showStudentHistory(event: LineWebhookEvent) {
     return;
   }
 
-  const [scheduleRows, transactionRows] = await Promise.all([
-    listRecords<Row>("schedules"),
-    listRecords<Row>("transactions"),
-  ]);
-  const scheduleById = new Map(scheduleRows.map((row) => {
-    const schedule = mapSchedule(row);
-    return [schedule.id, schedule];
-  }));
-  const transactions = transactionRows
-    .map(mapTransaction)
-    .filter((transaction) => transaction.source === "schedule" && transaction.kind === "income" && transaction.student_id === student.id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const historyUrl = createLineHistoryUrl(event.source?.userId || "");
+  if (!historyUrl) {
+    await replyLineText(event.replyToken, "ยังสร้างลิงก์ประวัติไม่ได้ครับ กรุณาติดต่อเหรัญญิกเพื่อตั้งค่า APP_URL");
+    return;
+  }
 
-  await replyLineMessages(event.replyToken, [
-    createFlexMessage(
-      transactions.length > 0 ? `ประวัติการชำระเงิน ${transactions.length} รายการ` : "ยังไม่มีประวัติการชำระเงิน",
-      createStudentHistoryBubble(student, transactions, scheduleById)
-    ),
-  ]);
+  await replyLineText(event.replyToken, [
+    "ดูประวัติการชำระเงินของคุณได้ที่ลิงก์นี้ครับ",
+    historyUrl,
+    "ลิงก์นี้ใช้ได้ 24 ชั่วโมงเพื่อความเป็นส่วนตัว 🔐",
+  ].join("\n"));
 }
 
 async function showClassroomTotal(event: LineWebhookEvent) {
@@ -809,34 +800,6 @@ function normalizeTransactionMethod(transaction: ReturnType<typeof mapTransactio
   return transaction.method === "kplus" || transaction.method === "cash" || transaction.method === "truemoney"
     ? transaction.method
     : methodFromPocketId(transaction.pocket_id);
-}
-
-function createStudentHistoryBubble(
-  student: ReturnType<typeof mapStudent>,
-  transactions: ReturnType<typeof mapTransaction>[],
-  scheduleById: Map<string, ReturnType<typeof mapSchedule>>
-) {
-  const totalPaid = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
-  const bodyContents: LineFlexBox[] = [
-    flexHero("ประวัติการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "history"),
-    flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
-    metricGrid([
-      metricBox("รวมที่จ่าย", formatBaht(totalPaid), "#2563EB", "#EFF6FF"),
-      metricBox("จำนวน", `${transactions.length} รายการ`, "#0891B2", "#ECFEFF"),
-    ]),
-  ];
-
-  if (transactions.length === 0) {
-    bodyContents.push(emptyStateBox("ยังไม่มีประวัติการชำระเงินครับ", "เมื่อเหรัญญิกอนุมัติแล้ว รายการจะแสดงตรงนี้"));
-  } else {
-    bodyContents.push(flexSectionTitle("ล่าสุด"));
-    bodyContents.push(...transactions.slice(0, 10).map((transaction) => {
-      const scheduleName = transaction.schedule_id ? scheduleById.get(transaction.schedule_id)?.name : undefined;
-      return historyRow(scheduleName || transaction.name, transaction.amount, formatMethod(transaction.method), transaction.created_at);
-    }));
-  }
-
-  return flexBubble(bodyContents);
 }
 
 function createClassroomTotalBubble(summary: ReturnType<typeof calculateClassroomMoneySummary>) {

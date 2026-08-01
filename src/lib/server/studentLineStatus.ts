@@ -35,3 +35,24 @@ export async function getStudentLineStatus(lineUserId: string) {
     pendingReviews,
   };
 }
+
+export async function getStudentLineHistory(lineUserId: string) {
+  const [studentRows, scheduleRows, transactionRows] = await Promise.all([
+    listRecords<Row>("students"),
+    listRecords<Row>("schedules"),
+    listRecords<Row>("transactions"),
+  ]);
+  const student = studentRows.map(mapStudent).find((item) => item.line_user_id === lineUserId);
+  if (!student) return null;
+
+  const scheduleById = new Map(scheduleRows.map((row) => {
+    const schedule = mapSchedule(row);
+    return [schedule.id, schedule];
+  }));
+  const transactions = transactionRows
+    .map(mapTransaction)
+    .filter((transaction) => transaction.source === "schedule" && transaction.kind === "income" && transaction.student_id === student.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  return { student, transactions, scheduleById };
+}
