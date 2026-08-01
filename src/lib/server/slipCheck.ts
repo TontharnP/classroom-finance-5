@@ -41,6 +41,7 @@ export type SlipCheckOptions = {
   transactionAccountExclusions?: string[];
   contentType?: string;
   remark?: string;
+  qrOnly?: boolean;
 };
 
 export async function analyzeSlipImage(
@@ -56,16 +57,18 @@ export async function analyzeSlipImage(
   ]);
   const qrPayloads = await readQrPayloads(data);
   const qrPayload = selectSlipQrPayload(qrPayloads, transactionAccountExclusions) || qrPayloads[0];
-  const easySlip = await verifySlipWithEasySlip({
-    data,
-    contentType: options.contentType,
-    qrPayload,
-    expectedAmount,
-    paymentMethod: options.paymentMethod,
-    remark: options.remark,
-  });
-  const easySlipData = easySlip.ok ? easySlip.data : undefined;
-  const shouldRunLocalOcr = !easySlip.ok || process.env.EASYSLIP_ALWAYS_RUN_LOCAL_OCR === "true";
+  const easySlip = options.qrOnly
+    ? undefined
+    : await verifySlipWithEasySlip({
+      data,
+      contentType: options.contentType,
+      qrPayload,
+      expectedAmount,
+      paymentMethod: options.paymentMethod,
+      remark: options.remark,
+    });
+  const easySlipData = easySlip?.ok ? easySlip.data : undefined;
+  const shouldRunLocalOcr = !options.qrOnly && (!easySlip?.ok || process.env.EASYSLIP_ALWAYS_RUN_LOCAL_OCR === "true");
   const ocrText = shouldRunLocalOcr ? await readOcrText(data) : undefined;
   const easySlipText = easySlipData ? stringifyEasySlipSearchText(easySlipData) : "";
   const easySlipAmount = easySlipData ? extractEasySlipAmount(easySlipData) : undefined;
@@ -120,11 +123,11 @@ export async function analyzeSlipImage(
     receiverNameMatches,
     detectedReceiverName,
     rawDetectedReceiverName,
-    provider: easySlip.ok ? "easyslip" : "local",
-    easySlipMethod: easySlip.provider === "easyslip" ? easySlip.method : undefined,
-    easySlipVerified: easySlip.ok,
+    provider: easySlip?.ok ? "easyslip" : "local",
+    easySlipMethod: easySlip?.provider === "easyslip" ? easySlip.method : undefined,
+    easySlipVerified: Boolean(easySlip?.ok),
     easySlipDuplicate: Boolean(easySlipData?.isDuplicate),
-    easySlipError: easySlip.ok || easySlip.provider === "none" ? undefined : `${easySlip.code || easySlip.status}: ${easySlip.message}`,
+    easySlipError: !easySlip || easySlip.ok || easySlip.provider === "none" ? undefined : `${easySlip.code || easySlip.status}: ${easySlip.message}`,
   };
 }
 

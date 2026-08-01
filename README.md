@@ -527,16 +527,9 @@ The script prints JSON similar to:
 }
 ```
 
-### No Automatic Approval
+### QR Gate And Manual Review
 
-The app never auto-approves a slip. A locally-decoded QR payload or OCR text is not cryptographic proof of a real bank transfer — it's just a string the app parsed out of an image, and can't be trusted on its own to move money. Even when EasySlip verifies a slip, the request is still left in `pending_slip_review` for a treasurer to confirm before a `transactions` row is created.
-
-The production checker only automates two outcomes, both rejections:
-
-- **Duplicate**: same QR payload, image hash, or transaction id as an existing pending request or an archived approved slip, or EasySlip's own duplicate flag → `duplicate_suspected`, kept for manual review (not deleted).
-- **Invalid/mismatched**: no QR, no EasySlip verification, no transaction id, and no matching amount/account/name at all, or (optionally, per `SLIP_AUTO_REJECT_INVALID_IMAGE`/`TRUEMONEY_AUTO_REJECT_RECEIVER_MISMATCH`) a confirmed amount or receiver mismatch → auto-rejected, request and slip image deleted.
-
-Everything else — including a slip that looks completely clean — stays `pending_slip_review` and requires a treasurer to approve it from the web app.
+The app never auto-approves a slip. The LINE submission path reads only the QR code: an image without a readable QR code is auto-rejected as a likely non-slip image, while every QR-bearing image is kept for `pending_slip_review`. This means amounts, recipients, EasySlip results, OCR, and duplicate warnings are review information only; the treasurer makes the final approval or rejection in the web app.
 
 ## Database Integration
 
