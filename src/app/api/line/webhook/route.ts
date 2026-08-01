@@ -724,11 +724,12 @@ async function showStudentHistory(event: LineWebhookEvent) {
     return;
   }
 
-  await replyLineText(event.replyToken, [
-    "ดูประวัติการชำระเงินของคุณได้ที่ลิงก์นี้ครับ",
-    historyUrl,
-    "ลิงก์นี้ใช้ได้ 24 ชั่วโมงเพื่อความเป็นส่วนตัว 🔐",
-  ].join("\n"));
+  await replyLineMessages(event.replyToken, [
+    createFlexMessage(
+      "เปิดประวัติการชำระเงินของคุณ",
+      createHistoryLinkBubble(student, historyUrl)
+    ),
+  ]);
 }
 
 async function showClassroomTotal(event: LineWebhookEvent) {
@@ -850,6 +851,21 @@ function createStudentStatusBubble(student: ReturnType<typeof mapStudent>, overv
   }
 
   return flexBubble(bodyContents);
+}
+
+function createHistoryLinkBubble(student: ReturnType<typeof mapStudent>, historyUrl: string) {
+  return flexBubble([
+    flexHero("ประวัติการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "history"),
+    flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
+    flexText("แตะปุ่มด้านล่างเพื่อดูรายการชำระเงินทั้งหมด", "#374151", "sm"),
+    flexButton(
+      "เปิดประวัติการชำระเงิน",
+      { type: "uri", label: "เปิดประวัติ", uri: historyUrl },
+      "primary",
+      "#7C3AED"
+    ),
+    flexText("ลิงก์นี้ใช้ได้ 24 ชั่วโมงเพื่อความเป็นส่วนตัว 🔐", "#6B7280", "xs"),
+  ]);
 }
 
 function createClassroomTotalBubble(summary: ReturnType<typeof calculateClassroomMoneySummary>) {
