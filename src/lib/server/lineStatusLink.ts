@@ -18,6 +18,12 @@ function getAppUrl() {
   const configuredUrl = process.env.APP_URL?.trim();
   if (configuredUrl) return configuredUrl.replace(/\/+$/, "");
 
+  // VERCEL_URL identifies the current deployment, which can be a protected
+  // preview hostname. Prefer the stable project production domain when Vercel
+  // exposes it, then use the deployment URL only as a final fallback.
+  const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (productionUrl) return `https://${productionUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+
   const vercelUrl = process.env.VERCEL_URL?.trim();
   return vercelUrl ? `https://${vercelUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}` : undefined;
 }
