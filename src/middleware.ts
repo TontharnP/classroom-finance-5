@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
   "/api/line/webhook",
+  "/api/line/profile",
   "/line-history",
   "/api/health",
   "/api/cron/keep-alive",

@@ -447,31 +447,19 @@ There are two related but different slip-checking paths.
 
 ### Production Webhook Checker
 
-The production webhook uses:
+The production webhook uses the QR reader in:
 
 ```txt
-src/lib/server/easySlip.ts
 src/lib/server/slipCheck.ts
 ```
 
-It verifies LINE-uploaded slips with EasySlip API v2 when `EASYSLIP_API_KEY` is configured:
+It reads the QR code from the submitted image. The LINE workflow uses this as an entry gate only:
 
-- Bank slips use `POST https://api.easyslip.com/v2/verify/bank`.
-- TrueMoney slips use `POST https://api.easyslip.com/v2/verify/truewallet`.
-- Requests use multipart image upload with `matchAmount`, `matchAccount`, and `checkDuplicate`.
-- The API key is sent only from server code as a Bearer token.
+- An image without a readable QR code is rejected as a likely non-slip image.
+- An image with a readable QR code is saved for manual review.
+- No EasySlip call, OCR scan, amount comparison, recipient comparison, or automatic approval runs in the LINE submission path. Duplicate metadata is retained only to help the treasurer review a possible repeated submission.
 
-The local helper still runs as fallback and supporting evidence. It checks:
-
-- SHA-256 image hash.
-- QR readability through `sharp` and `jsqr`.
-- QR payload.
-- OCR text using `tesseract.js`.
-- Amount from EasySlip first, then QR EMV tag `54`, then OCR fallback.
-- Receiver account and receiver name from EasySlip/QR/OCR searchable text.
-- Likely slip transaction or reference id from the QR payload.
-
-If EasySlip is unavailable, returns an inconclusive response, or the local fallback cannot prove the slip, the request stays in web review instead of being blindly marked as paid.
+The checker still supports a full EasySlip/OCR analysis when used outside this QR-only workflow, but that analysis does not decide LINE payment approval.
 
 ### Local Debug Checker
 

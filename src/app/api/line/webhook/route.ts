@@ -566,8 +566,9 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
       existingSlipRows.some((row) => String(row.slip_transaction_id || "").toUpperCase() === slipCheck.slipTransactionId)
   );
   const duplicateSuspected = duplicateByQr || duplicateByHash || duplicateByTransaction || slipCheck.easySlipDuplicate;
-  // A submission with a QR code always stays for manual review. Reject only
-  // obvious non-slip images, such as photos, memes, or screenshots without QR.
+  // LINE slip submissions always require a treasurer's review. The only
+  // entry-level rejection is a photo without a readable QR code, which keeps
+  // obvious non-slip images (for example, memes or pet photos) out of review.
   const shouldAutoRejectInvalidImage = !slipCheck.qrReadable;
   const autoRejectReasons = [
     shouldAutoRejectInvalidImage ? "ระบบไม่พบ QR code ในรูปที่ส่งมา จึงไม่ใช่สลิปโอนเงิน" : "",

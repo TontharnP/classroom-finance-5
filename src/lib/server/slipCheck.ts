@@ -91,13 +91,23 @@ export async function analyzeSlipImage(
         ? Math.abs(detectedAmount - expectedAmount) < 0.01
         : null;
   const easySlipAccountMatched = easySlipData ? hasEasySlipMatchedAccount(easySlipData) : false;
-  const receiverAccountMatches = easySlipAccountMatched
-    ? true
-    : receiverSearchableText && expectedAccounts.length > 0
-      ? containsExpectedAccount(receiverSearchableText, expectedAccounts)
-      : null;
-  const receiverNameMatches = receiverSearchableText && expectedReceiverName
+  const localReceiverAccountMatched = receiverSearchableText && expectedAccounts.length > 0
+    ? containsExpectedAccount(receiverSearchableText, expectedAccounts)
+    : null;
+  const localReceiverNameMatched = receiverSearchableText && expectedReceiverName
     ? containsExpectedName([receiverSearchableText, rawDetectedReceiverName].filter(Boolean).join("\n"), expectedReceiverName)
+    : null;
+
+  // A bank receipt can show a masked destination account (or a bank account
+  // behind a PromptPay ID), so failing to find the configured value in OCR/QR
+  // is inconclusive—not proof that money went to another account. Only retain
+  // positive local evidence here. EasySlip's configured-account match is a
+  // stronger signal and also verifies the destination without OCR name noise.
+  const receiverAccountMatches = easySlipAccountMatched || localReceiverAccountMatched === true
+    ? true
+    : null;
+  const receiverNameMatches = easySlipAccountMatched || localReceiverNameMatched === true
+    ? true
     : null;
   const detectedReceiverName = receiverNameMatches === true && expectedReceiverName
     ? expectedReceiverName

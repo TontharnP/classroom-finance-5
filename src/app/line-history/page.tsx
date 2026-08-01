@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getStudentLineHistory } from "@/lib/server/studentLineStatus";
 import { verifyLineStatusToken } from "@/lib/server/lineStatusLink";
+import { LineProfileCard } from "@/components/line/LineProfileCard";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,17 @@ export default async function LineHistoryPage({ searchParams }: PageProps) {
             <p className="mt-1 text-3xl font-bold sm:text-4xl">{formatBaht(totalPaid)}</p>
           </div>
         </header>
+
+        <LineProfileCard
+          token={token}
+          student={{
+            prefix: history.student.prefix,
+            firstName: history.student.first_name,
+            lastName: history.student.last_name,
+            number: history.student.number,
+            nickName: history.student.nick_name,
+          }}
+        />
 
         <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 pb-3 sm:pb-4">
