@@ -531,6 +531,10 @@ The script prints JSON similar to:
 
 The app never auto-approves a slip. The LINE submission path reads only the QR code: an image without a readable QR code is auto-rejected as a likely non-slip image, while every QR-bearing image is kept for `pending_slip_review`. This means amounts, recipients, EasySlip results, OCR, and duplicate warnings are review information only; the treasurer makes the final approval or rejection in the web app.
 
+### Student Status Link
+
+When a student opens the LINE status menu, the bot sends a compact message with a secure link to `/line-status`. The link is signed with `LINE_CHANNEL_SECRET`, identifies only that LINE user, and expires after 24 hours. Set `APP_URL` to the production domain (for example, `https://your-app.example`) so the bot can create a public link. `VERCEL_URL` is used as a fallback on Vercel.
+
 ## Database Integration
 
 ### `line_payment_requests`
