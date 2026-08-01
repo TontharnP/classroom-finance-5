@@ -533,7 +533,7 @@ The app never auto-approves a slip. The LINE submission path reads only the QR c
 
 ### Student Status Link
 
-When a student opens the LINE status or history menu, the bot sends a compact message with a secure link to `/line-status` or `/line-history`. The link is signed with `LINE_CHANNEL_SECRET`, identifies only that LINE user, and expires after 24 hours. Set `APP_URL` to the production domain (for example, `https://your-app.example`) so the bot can create a public link. `VERCEL_URL` is used as a fallback on Vercel.
+When a student opens the LINE history menu, the bot sends a compact message with a secure link to `/line-history`. The link is signed with `LINE_CHANNEL_SECRET`, identifies only that LINE user, and expires after 24 hours. Set `APP_URL` to the production domain (for example, `https://your-app.example`) so the bot can create a public link. `VERCEL_URL` is used as a fallback on Vercel.
 
 ## Database Integration
 

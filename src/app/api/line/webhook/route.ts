@@ -6,7 +6,7 @@ import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { deleteSlipImages, storeSlipImage } from "@/lib/server/slipStorage";
 import { linkLineRichMenuByName } from "@/lib/server/line";
-import { createLineHistoryUrl, createLineStatusUrl } from "@/lib/server/lineStatusLink";
+import { createLineHistoryUrl } from "@/lib/server/lineStatusLink";
 import {
   createFlexMessage,
   emptyStateBox,
@@ -700,17 +700,15 @@ async function showStudentStatus(event: LineWebhookEvent) {
     return;
   }
 
-  const statusUrl = createLineStatusUrl(event.source?.userId || "");
-  if (!statusUrl) {
-    await replyLineText(event.replyToken, "ยังสร้างลิงก์สถานะไม่ได้ครับ กรุณาติดต่อเหรัญญิกเพื่อตั้งค่า APP_URL");
-    return;
-  }
+  const overview = await getStudentPaymentOverview(student.id);
+  const totalDebt = overview.debts.reduce((sum, debt) => sum + debt.remaining, 0);
+  const altText = totalDebt > 0
+    ? `สถานะของคุณ: ค้าง ${formatBaht(totalDebt)} จาก ${overview.debts.length} รายการ`
+    : "สถานะของคุณ: ไม่มีรายการค้างชำระ";
 
-  await replyLineText(event.replyToken, [
-    "ดูสถานะการชำระเงินของคุณได้ที่ลิงก์นี้ครับ",
-    statusUrl,
-    "ลิงก์นี้ใช้ได้ 24 ชั่วโมงเพื่อความเป็นส่วนตัว 🔐",
-  ].join("\n"));
+  await replyLineMessages(event.replyToken, [
+    createFlexMessage(altText, createStudentStatusBubble(student, overview)),
+  ]);
 }
 
 async function showStudentHistory(event: LineWebhookEvent) {
@@ -749,6 +747,29 @@ async function showClassroomTotal(event: LineWebhookEvent) {
       createClassroomTotalBubble(summary)
     ),
   ]);
+}
+
+async function getStudentPaymentOverview(studentId: string) {
+  const [scheduleRows, transactionRows] = await Promise.all([
+    listRecords<Row>("schedules"),
+    listRecords<Row>("transactions"),
+  ]);
+  const schedules = scheduleRows.map(mapSchedule).filter((schedule) => schedule.student_ids.includes(studentId));
+  const transactions = transactionRows.map(mapTransaction);
+  const items = schedules
+    .map((schedule) => {
+      const paid = transactions
+        .filter((transaction) => transaction.source === "schedule" && transaction.kind === "income" && transaction.schedule_id === schedule.id && transaction.student_id === studentId)
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      return { schedule, remaining: Math.max(0, Math.round((schedule.amount_per_item - paid) * 100) / 100) };
+    })
+    .sort((a, b) => String(a.schedule.end_date || a.schedule.start_date).localeCompare(String(b.schedule.end_date || b.schedule.start_date)));
+
+  return {
+    totalSchedules: items.length,
+    paidSchedules: items.filter((item) => item.remaining <= 0),
+    debts: items.filter((item) => item.remaining > 0),
+  };
 }
 
 function calculateClassroomMoneySummary(transactions: ReturnType<typeof mapTransaction>[]) {
@@ -800,6 +821,35 @@ function normalizeTransactionMethod(transaction: ReturnType<typeof mapTransactio
   return transaction.method === "kplus" || transaction.method === "cash" || transaction.method === "truemoney"
     ? transaction.method
     : methodFromPocketId(transaction.pocket_id);
+}
+
+function createStudentStatusBubble(student: ReturnType<typeof mapStudent>, overview: Awaited<ReturnType<typeof getStudentPaymentOverview>>) {
+  const totalDebt = overview.debts.reduce((sum, debt) => sum + debt.remaining, 0);
+  const bodyContents: LineFlexBox[] = [
+    flexHero("สถานะการชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "status"),
+    flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
+    metricGrid([
+      metricBox("ยอดค้าง", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
+      metricBox("ค้าง", `${overview.debts.length} รายการ`, "#EA580C", "#FFF7ED"),
+      metricBox("จ่ายแล้ว", `${overview.paidSchedules.length}/${overview.totalSchedules}`, "#059669", "#ECFDF5"),
+    ]),
+  ];
+
+  if (overview.debts.length === 0) {
+    bodyContents.push(emptyStateBox("ไม่มีรายการค้างชำระครับ ✅", "กระเป๋าสตางค์รอดแล้ววันนี้"));
+  } else {
+    bodyContents.push(flexSectionTitle("แตะเลือกรายการเพื่อชำระเงิน"));
+    bodyContents.push(...overview.debts.slice(0, 8).map((debt) => paymentDebtButton(
+      debt.schedule.name,
+      debt.remaining,
+      debt.schedule.end_date || debt.schedule.start_date,
+      `pay:schedule:${debt.schedule.id}`
+    )));
+    if (overview.debts.length > 8) bodyContents.push(flexText(`และอีก ${overview.debts.length - 8} รายการ`, "#6B7280", "xs"));
+    bodyContents.push(flexButton("เปิดเมนูชำระเงิน", { type: "message", label: "ชำระเงิน", text: "ชำระเงิน" }, "primary", "#2563EB"));
+  }
+
+  return flexBubble(bodyContents);
 }
 
 function createClassroomTotalBubble(summary: ReturnType<typeof calculateClassroomMoneySummary>) {

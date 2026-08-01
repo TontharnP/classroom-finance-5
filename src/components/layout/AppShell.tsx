@@ -11,7 +11,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // The login page has no session yet, so it must render outside the data
   // hydration gate (which fetches authenticated data) and the app chrome.
-  if (pathname === "/login" || pathname.startsWith("/line-status") || pathname.startsWith("/line-history")) {
+  if (pathname === "/login" || pathname.startsWith("/line-history")) {
     return <>{children}</>;
   }
 
