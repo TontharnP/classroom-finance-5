@@ -28,7 +28,7 @@ function formatMethod(method: string | undefined) {
 export default async function LineHistoryPage({ searchParams }: PageProps) {
   const { token } = await searchParams;
   const payload = verifyLineStatusToken(token);
-  if (!payload) notFound();
+  if (!token || !payload) notFound();
 
   const history = await getStudentLineHistory(payload.userId);
   if (!history) notFound();
