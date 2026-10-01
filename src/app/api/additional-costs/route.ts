@@ -50,12 +50,20 @@ export async function POST(request: Request) {
     }
     if (!UUID_PATTERN.test(requestKey)) return badRequest("A valid request key is required");
 
-    const priorRuns = await listRecords<Row>("additional_cost_runs");
-    const existingRun = priorRuns.find((run) => run.request_key === requestKey);
+    const { data: existingRunData, error: existingRunError } = await getSupabaseAdmin()
+      .from("additional_cost_runs")
+      .select("*")
+      .eq("request_key", requestKey)
+      .maybeSingle();
+    if (existingRunError) throw existingRunError;
+    const existingRun = existingRunData as Row | null;
     if (existingRun) {
-      const existingItems = (await listRecords<Row>("additional_cost_items"))
-        .filter((item) => item.run_id === existingRun.id)
-        .map(mapAdditionalCostItem);
+      const { data: itemData, error: itemError } = await getSupabaseAdmin()
+        .from("additional_cost_items")
+        .select("*")
+        .eq("run_id", String(existingRun.id));
+      if (itemError) throw itemError;
+      const existingItems = ((itemData ?? []) as Row[]).map(mapAdditionalCostItem);
       return ok({ run: mapAdditionalCostRun(existingRun), items: existingItems });
     }
 

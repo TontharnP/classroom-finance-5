@@ -1,5 +1,7 @@
 "use client";
 import React from "react";
+import { usePathname } from "next/navigation";
+import { getRequiredBootstrapResources } from "@/lib/bootstrap";
 import { useAppStore } from "@/lib/store";
 import { DataHydrator } from "@/components/providers/DataHydrator";
 
@@ -9,7 +11,11 @@ type Props = {
 };
 
 export function HydrationGate({ children, fallback = null }: Props) {
-  const isHydrated = useAppStore((s) => s.isHydrated);
+  const pathname = usePathname();
+  const loadedResources = useAppStore((s) => s.loadedResources);
+  const isHydrated = getRequiredBootstrapResources(pathname).every((resource) =>
+    loadedResources.includes(resource)
+  );
 
   return (
     <>

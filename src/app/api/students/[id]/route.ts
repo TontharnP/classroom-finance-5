@@ -1,6 +1,6 @@
 import { noContent, notFound, ok, serverError } from "@/lib/api/response";
 import { deleteTransactionWithSlipData } from "@/lib/server/transactionDeletion";
-import { deleteRecord, getRecord, listRecords, updateRecord, type Row } from "@/lib/supabase/server";
+import { deleteRecord, getRecord, getSupabaseAdmin, updateRecord, type Row } from "@/lib/supabase/server";
 import { mapStudent } from "@/lib/supabase/mappers";
 import { linkLineRichMenuByName } from "@/lib/server/line";
 import type { StudentUpdate } from "@/types/supabase";
@@ -43,10 +43,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const student = await getRecord<Row>("students", id);
     if (!student) return notFound("Student not found");
 
-    const transactions = await listRecords<Row>("transactions");
+    const { data, error } = await getSupabaseAdmin()
+      .from("transactions")
+      .select("id")
+      .eq("student_id", id);
+    if (error) throw error;
+    const transactions = (data ?? []) as Row[];
     await Promise.all(
       transactions
-        .filter((transaction) => transaction.student_id === id)
         .map((transaction) => deleteTransactionWithSlipData(String(transaction.id)))
     );
 

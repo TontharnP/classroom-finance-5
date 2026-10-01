@@ -1,11 +1,15 @@
 import { create } from "zustand";
 import { DataBundle, Student, Schedule, ScheduleFolder, Transaction, Category, Pocket, AdditionalCostRun, AdditionalCostItem } from "@/types";
+import type { BootstrapResource } from "@/lib/bootstrap";
 
 interface AppState {
   data: DataBundle;
   isHydrated: boolean;
+  loadedResources: BootstrapResource[];
   hydrationError: string | null;
   setData: (bundle: DataBundle) => void;
+  mergeData: (bundle: Partial<DataBundle>) => void;
+  markResourcesLoaded: (resources: BootstrapResource[]) => void;
   markHydrated: () => void;
   setHydrationError: (err: string | null) => void;
   addStudent: (student: Student) => void;
@@ -33,8 +37,15 @@ export const useAppStore = create<AppState>((set) => ({
   // Start empty; we'll hydrate from the database on app load
   data: { students: [], schedules: [], scheduleFolders: [], transactions: [], categories: [], pockets: [], additionalCostRuns: [], additionalCostItems: [] },
   isHydrated: false,
+  loadedResources: [],
   hydrationError: null,
   setData: (bundle) => set(() => ({ data: bundle })),
+  mergeData: (bundle) => set((state) => ({ data: { ...state.data, ...bundle } })),
+  markResourcesLoaded: (resources) =>
+    set((state) => ({
+      loadedResources: Array.from(new Set([...state.loadedResources, ...resources])),
+      isHydrated: true,
+    })),
   markHydrated: () => set(() => ({ isHydrated: true })),
   setHydrationError: (err) => set(() => ({ hydrationError: err })),
 

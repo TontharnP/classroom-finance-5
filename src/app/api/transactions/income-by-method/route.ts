@@ -1,11 +1,15 @@
 import { ok, serverError } from "@/lib/api/response";
-import { listRecords, type Row } from "@/lib/supabase/server";
+import { getSupabaseAdmin, type Row } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
-    const rows = (await listRecords<Row>("transactions")).filter(
-      (transaction) => transaction.source === "schedule" && transaction.kind === "income"
-    );
+    const { data, error } = await getSupabaseAdmin()
+      .from("transactions")
+      .select("method,amount")
+      .eq("source", "schedule")
+      .eq("kind", "income");
+    if (error) throw error;
+    const rows = (data ?? []) as Row[];
     const kplus = sumByMethod(rows, "kplus");
     const cash = sumByMethod(rows, "cash");
     const truemoney = sumByMethod(rows, "truemoney");

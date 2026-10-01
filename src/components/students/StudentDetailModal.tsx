@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { X, User, Edit2, Trash2, ImageOff, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,7 +10,6 @@ import { useAppStore } from "@/lib/store";
 import { getFolderPath, getSchedulesInSystemOrder } from "@/lib/schedules/grouping";
 import type { Student } from "@/types";
 import { EditStudentModal } from "./EditStudentModal";
-import { QuickPayModal } from "../transactions/QuickPayModal";
 import { EditTransactionModal } from "../transactions/EditTransactionModal";
 import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
 import {
@@ -19,6 +19,11 @@ import {
 } from "@/lib/supabase/students";
 import { dbStudentToStudent } from "@/lib/supabase/adapter";
 import { getStudentScheduleTarget } from "@/lib/additionalCosts";
+
+const QuickPayModal = dynamic(
+  () => import("../transactions/QuickPayModal").then((module) => module.QuickPayModal),
+  { ssr: false }
+);
 
 type StudentDetailModalProps = {
   isOpen: boolean;

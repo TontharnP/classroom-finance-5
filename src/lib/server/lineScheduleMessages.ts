@@ -1,7 +1,7 @@
 import "server-only";
 
-import { getRecord, listRecords, type Row } from "@/lib/supabase/server";
-import { mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
+import { getRecord, getSupabaseAdmin, type Row } from "@/lib/supabase/server";
+import { mapSchedule, mapStudent } from "@/lib/supabase/mappers";
 import {
   createFlexMessage,
   flexBubble,
@@ -57,18 +57,28 @@ export async function sendScheduleLineNotices({
   if (!scheduleRow) return null;
 
   const schedule = mapSchedule(scheduleRow);
-  const [studentRows, transactionRows, additionalCosts] = await Promise.all([
-    listRecords<Row>("students"),
-    listRecords<Row>("transactions"),
-    getAdditionalCostTotals(),
+  const [studentResult, transactionResult, additionalCosts] = await Promise.all([
+    schedule.student_ids.length > 0
+      ? getSupabaseAdmin().from("students").select("*").in("id", schedule.student_ids)
+      : Promise.resolve({ data: [], error: null }),
+    getSupabaseAdmin()
+      .from("transactions")
+      .select("student_id,amount")
+      .eq("schedule_id", schedule.id)
+      .eq("source", "schedule")
+      .eq("kind", "income"),
+    getAdditionalCostTotals({ scheduleId: schedule.id }),
   ]);
-  const students = studentRows.map(mapStudent);
-  const transactions = transactionRows.map(mapTransaction);
+  if (studentResult.error) throw studentResult.error;
+  if (transactionResult.error) throw transactionResult.error;
+  const students = ((studentResult.data ?? []) as Row[]).map(mapStudent);
+  const transactions = (transactionResult.data ?? []) as Row[];
   const paidByStudent = new Map<string, number>();
 
   for (const transaction of transactions) {
-    if (transaction.source !== "schedule" || transaction.schedule_id !== schedule.id || !transaction.student_id) continue;
-    paidByStudent.set(transaction.student_id, (paidByStudent.get(transaction.student_id) || 0) + transaction.amount);
+    if (!transaction.student_id) continue;
+    const studentId = String(transaction.student_id);
+    paidByStudent.set(studentId, (paidByStudent.get(studentId) || 0) + Number(transaction.amount ?? 0));
   }
 
   const targetStudents = students

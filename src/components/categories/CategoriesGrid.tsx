@@ -1,11 +1,19 @@
 "use client";
 import { createElement, useState, useMemo, memo } from "react";
+import dynamic from "next/dynamic";
 import { Plus } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import type { Category, Transaction } from "@/types";
-import { CategoryDetailModal } from "./CategoryDetailModal";
-import { AddCategoryModal } from "./AddCategoryModal";
 import { getIconComponent } from "./IconPicker";
+
+const CategoryDetailModal = dynamic(
+  () => import("./CategoryDetailModal").then((module) => module.CategoryDetailModal),
+  { ssr: false }
+);
+const AddCategoryModal = dynamic(
+  () => import("./AddCategoryModal").then((module) => module.AddCategoryModal),
+  { ssr: false }
+);
 
 type CategoryStats = { count: number; total: number };
 const emptyStats: CategoryStats = { count: 0, total: 0 };

@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseAdmin, isMissingTableError, type Row } from "@/lib/supabase/server";
 
 type SlipRow = Pick<Row, "transaction_id" | "slip_url" | "slip_pathname">;
+const IDS_PER_REQUEST = 100;
+const MAX_PARALLEL_REQUESTS = 4;
 
 export async function attachSlipDataToTransactions(rows: Row[]): Promise<Row[]> {
   const transactionIds = rows.map((row) => String(row.id || "")).filter(Boolean);
@@ -33,13 +35,26 @@ export async function attachSlipDataToTransaction(row: Row | null): Promise<Row 
 
 async function listSlipRowsByTransactionIds(table: string, transactionIds: string[]): Promise<SlipRow[]> {
   try {
-    const { data, error } = await getSupabaseAdmin()
-      .from(table)
-      .select("transaction_id, slip_url, slip_pathname")
-      .in("transaction_id", transactionIds);
+    const batches: string[][] = [];
+    for (let index = 0; index < transactionIds.length; index += IDS_PER_REQUEST) {
+      batches.push(transactionIds.slice(index, index + IDS_PER_REQUEST));
+    }
 
-    if (error) throw error;
-    return (data || []) as SlipRow[];
+    const rows: SlipRow[] = [];
+    for (let index = 0; index < batches.length; index += MAX_PARALLEL_REQUESTS) {
+      const results = await Promise.all(
+        batches.slice(index, index + MAX_PARALLEL_REQUESTS).map(async (ids) => {
+          const { data, error } = await getSupabaseAdmin()
+            .from(table)
+            .select("transaction_id, slip_url, slip_pathname")
+            .in("transaction_id", ids);
+          if (error) throw error;
+          return (data || []) as SlipRow[];
+        })
+      );
+      for (const result of results) rows.push(...result);
+    }
+    return rows;
   } catch (error) {
     if (isMissingTableError(error, table)) return [];
     throw error;

@@ -149,14 +149,19 @@ export async function ensureScheduleFolderSchema() {
 }
 
 async function createDefaultScheduleFolder() {
-  let folders: Row[] = [];
+  let hasFolder = false;
   try {
-    folders = await listRecords("schedule_folders");
+    const { data, error } = await getSupabaseAdmin()
+      .from("schedule_folders")
+      .select("id")
+      .limit(1);
+    if (error) throw error;
+    hasFolder = (data?.length ?? 0) > 0;
   } catch (error) {
     if (isMissingTableError(error, "schedule_folders")) return;
     throw error;
   }
-  if (folders.length > 0) return;
+  if (hasFolder) return;
 
   await createRecord("schedule_folders", {
     name: "Default",

@@ -1,14 +1,22 @@
 "use client";
 import { useState, useMemo, memo, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { filterTransactions } from "@/lib/calculations";
 import { TxnSource, TxnKind, PaymentMethod, Transaction } from "@/types";
 import { format } from "date-fns";
-import { AddTransactionModal } from "./AddTransactionModal";
-import { TransactionDetailModal } from "./TransactionDetailModal";
 import { TransactionSlipButton } from "./TransactionSlipButton";
+
+const AddTransactionModal = dynamic(
+  () => import("./AddTransactionModal").then((module) => module.AddTransactionModal),
+  { ssr: false }
+);
+const TransactionDetailModal = dynamic(
+  () => import("./TransactionDetailModal").then((module) => module.TransactionDetailModal),
+  { ssr: false }
+);
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);

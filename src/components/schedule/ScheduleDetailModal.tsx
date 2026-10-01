@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { X, Edit, Trash2, Check, XIcon, Bell, MessageCircleWarning, ReceiptText, ExternalLink, Wallet, BadgeCheck, Megaphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,9 +14,13 @@ import type { LinePaymentRequest, Schedule } from "@/types";
 import { toast } from "react-hot-toast";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EditScheduleModal } from "./EditScheduleModal";
-import { QuickPayModal } from "../transactions/QuickPayModal";
 import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
 import { getAdditionalCostAmount, getScheduleTargetTotal, getStudentScheduleTarget } from "@/lib/additionalCosts";
+
+const QuickPayModal = dynamic(
+  () => import("../transactions/QuickPayModal").then((module) => module.QuickPayModal),
+  { ssr: false }
+);
 
 type ScheduleDetailModalProps = {
   isOpen: boolean;

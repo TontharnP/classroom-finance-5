@@ -1,6 +1,6 @@
 import { badRequest, ok, serverError } from "@/lib/api/response";
 import { attachSlipDataToTransactions } from "@/lib/server/transactionSlips";
-import { createRecord, emptyToNull, listRecords, type Row } from "@/lib/supabase/server";
+import { createRecord, emptyToNull, getSupabaseAdmin, type Row } from "@/lib/supabase/server";
 import { mapTransaction } from "@/lib/supabase/mappers";
 import type { TransactionInput } from "@/types/supabase";
 
@@ -21,18 +21,22 @@ export async function GET(request: Request) {
     const month = url.searchParams.get("month");
     const categorySummary = url.searchParams.get("summary") === "category";
 
-    let rows = await listRecords<Row>("transactions");
-    if (kind) rows = rows.filter((transaction) => transaction.kind === kind);
-    if (source) rows = rows.filter((transaction) => transaction.source === source);
-    if (scheduleId) rows = rows.filter((transaction) => transaction.schedule_id === scheduleId);
-    if (studentId) rows = rows.filter((transaction) => transaction.student_id === studentId);
+    const columns: string = categorySummary
+      ? "category,kind,amount"
+      : "id,name,kind,amount,method,category,category_id,description,source,schedule_id,student_id,created_at,updated_at,pocket_id,source_pocket_id,destination_pocket_id";
+    let query = getSupabaseAdmin().from("transactions").select(columns);
+    if (kind) query = query.eq("kind", kind);
+    if (source) query = query.eq("source", source);
+    if (scheduleId) query = query.eq("schedule_id", scheduleId);
+    if (studentId) query = query.eq("student_id", studentId);
     if (month) {
       const [startDate, endDate] = monthRange(month);
-      rows = rows.filter((transaction) => {
-        const createdAt = String(transaction.created_at ?? "");
-        return createdAt >= startDate && createdAt < endDate;
-      });
+      query = query.gte("created_at", startDate).lt("created_at", endDate);
     }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+    if (error) throw error;
+    let rows = (data ?? []) as unknown as Row[];
 
     if (categorySummary) {
       const totals = new Map<string, { category: string; kind: string; amount: number }>();
@@ -50,7 +54,6 @@ export async function GET(request: Request) {
       );
     }
 
-    rows.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
     rows = await attachSlipDataToTransactions(rows);
     return ok(rows.map(mapTransaction));
   } catch (error) {

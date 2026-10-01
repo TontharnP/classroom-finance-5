@@ -1,6 +1,6 @@
 import "server-only";
 
-import { isMissingTableError, listRecords, toNumber, type Row } from "@/lib/supabase/server";
+import { getSupabaseAdmin, isMissingTableError, toNumber, type Row } from "@/lib/supabase/server";
 
 export type AdditionalCostCandidate = {
   scheduleId: string;
@@ -14,18 +14,25 @@ export function additionalCostKey(scheduleId: string, studentId: string) {
   return `${scheduleId}:${studentId}`;
 }
 
-export async function listAdditionalCostItemsSafely(): Promise<Row[]> {
+export async function listAdditionalCostItemsSafely(filters: { scheduleId?: string; studentId?: string } = {}): Promise<Row[]> {
   try {
-    return await listRecords<Row>("additional_cost_items");
+    let query = getSupabaseAdmin()
+      .from("additional_cost_items")
+      .select("schedule_id,student_id,amount");
+    if (filters.scheduleId) query = query.eq("schedule_id", filters.scheduleId);
+    if (filters.studentId) query = query.eq("student_id", filters.studentId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as Row[];
   } catch (error) {
     if (isMissingTableError(error, "additional_cost_items")) return [];
     throw error;
   }
 }
 
-export async function getAdditionalCostTotals() {
+export async function getAdditionalCostTotals(filters: { scheduleId?: string; studentId?: string } = {}) {
   const totals = new Map<string, number>();
-  for (const item of await listAdditionalCostItemsSafely()) {
+  for (const item of await listAdditionalCostItemsSafely(filters)) {
     const scheduleId = String(item.schedule_id);
     const studentId = String(item.student_id);
     const key = additionalCostKey(scheduleId, studentId);
@@ -35,11 +42,24 @@ export async function getAdditionalCostTotals() {
 }
 
 export async function buildAdditionalCostCandidates(percentage: number) {
-  const [schedules, transactions, existingItems] = await Promise.all([
-    listRecords<Row>("schedules"),
-    listRecords<Row>("transactions"),
+  const today = bangkokDateKey();
+  const [scheduleResult, transactionResult, existingItems] = await Promise.all([
+    getSupabaseAdmin()
+      .from("schedules")
+      .select("id,end_date,student_ids,amount_per_item")
+      .not("end_date", "is", null)
+      .lt("end_date", today),
+    getSupabaseAdmin()
+      .from("transactions")
+      .select("schedule_id,student_id,amount")
+      .eq("source", "schedule")
+      .eq("kind", "income"),
     listAdditionalCostItemsSafely(),
   ]);
+  if (scheduleResult.error) throw scheduleResult.error;
+  if (transactionResult.error) throw transactionResult.error;
+  const schedules = (scheduleResult.data ?? []) as Row[];
+  const transactions = (transactionResult.data ?? []) as Row[];
 
   const paid = new Map<string, number>();
   for (const transaction of transactions) {
@@ -59,7 +79,6 @@ export async function buildAdditionalCostCandidates(percentage: number) {
     existingCosts.set(key, roundMoney((existingCosts.get(key) || 0) + toNumber(item.amount)));
   }
 
-  const today = bangkokDateKey();
   const candidates: AdditionalCostCandidate[] = [];
   for (const schedule of schedules) {
     const dueDate = schedule.end_date ? String(schedule.end_date).slice(0, 10) : "";

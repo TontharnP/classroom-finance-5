@@ -1,5 +1,6 @@
 "use client";
 import { useState, memo, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -22,8 +23,15 @@ import { useAppStore } from "@/lib/store";
 import { getStudentScheduleTarget } from "@/lib/additionalCosts";
 import { sendScheduleLineReminders } from "@/lib/supabase/schedules";
 import type { Student } from "@/types";
-import { AddStudentModal } from "./AddStudentModal";
-import { StudentDetailModal } from "./StudentDetailModal";
+
+const AddStudentModal = dynamic(
+  () => import("./AddStudentModal").then((module) => module.AddStudentModal),
+  { ssr: false }
+);
+const StudentDetailModal = dynamic(
+  () => import("./StudentDetailModal").then((module) => module.StudentDetailModal),
+  { ssr: false }
+);
 
 type StudentStats = {
   paidTotal: number;

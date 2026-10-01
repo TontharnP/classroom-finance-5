@@ -1,12 +1,14 @@
 import React from "react";
 
-export function LoadingScreen() {
+export function LoadingScreen({ contained = false }: { contained?: boolean }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5"
+      className={contained
+        ? "flex h-full min-h-72 w-full flex-col items-center justify-center gap-5"
+        : "fixed inset-0 z-50 flex flex-col items-center justify-center gap-5"}
       style={{
         background: "color-mix(in srgb, var(--panel-solid) 82%, transparent)",
-        backdropFilter: "blur(28px) saturate(1.2)",
+        backdropFilter: contained ? undefined : "blur(28px) saturate(1.2)",
       }}
       role="status"
       aria-busy="true"

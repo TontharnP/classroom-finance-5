@@ -5,3 +5,4 @@ export * from "./scheduleFolders";
 export * from "./transactions";
 export * from "./categories";
 export * from "./additionalCosts";
+export * from "./bootstrap";

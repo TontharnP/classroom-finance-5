@@ -1,56 +1,52 @@
 "use client";
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { getRequiredBootstrapResources } from "@/lib/bootstrap";
 import { useAppStore } from "@/lib/store";
-import { getStudents, getSchedules, getScheduleFolders, getTransactions, getAdditionalCosts } from "@/lib/supabase";
-import { getCategories } from "@/lib/supabase/categories";
+import { getBootstrapData } from "@/lib/supabase";
 import { dbStudentToStudent, dbScheduleToSchedule, dbScheduleFolderToScheduleFolder, dbTransactionToTransaction, dbCategoryToCategory, dbAdditionalCostRunToAdditionalCostRun, dbAdditionalCostItemToAdditionalCostItem } from "@/lib/supabase/adapter";
 
 export function DataHydrator() {
-  const isHydrated = useAppStore((s) => s.isHydrated);
-  const setData = useAppStore((s) => s.setData);
-  const markHydrated = useAppStore((s) => s.markHydrated);
+  const pathname = usePathname();
+  const loadedResources = useAppStore((s) => s.loadedResources);
+  const mergeData = useAppStore((s) => s.mergeData);
+  const markResourcesLoaded = useAppStore((s) => s.markResourcesLoaded);
   const setHydrationError = useAppStore((s) => s.setHydrationError);
 
   useEffect(() => {
     let cancelled = false;
     async function hydrate() {
-      if (isHydrated) return;
+      const requiredResources = getRequiredBootstrapResources(pathname);
+      const missingResources = requiredResources.filter((resource) => !loadedResources.includes(resource));
+      if (missingResources.length === 0) return;
       try {
-        const [dbStudents, dbSchedules, dbScheduleFolders, dbTransactions, dbCategories, additionalCosts] = await Promise.all([
-          getStudents(),
-          getSchedules(),
-          getScheduleFolders(),
-          getTransactions(),
-          getCategories(),
-          getAdditionalCosts(),
-        ]);
+        const bootstrap = await getBootstrapData(missingResources);
         if (cancelled) return;
-        setData({
-          students: dbStudents.map(dbStudentToStudent),
-          schedules: dbSchedules.map(dbScheduleToSchedule),
-          scheduleFolders: dbScheduleFolders.map(dbScheduleFolderToScheduleFolder),
-          transactions: dbTransactions.map(dbTransactionToTransaction),
-          categories: dbCategories.map(dbCategoryToCategory),
-          // Fallback pockets since we don't have a pockets table yet
+        mergeData({
+          ...(bootstrap.students ? { students: bootstrap.students.map(dbStudentToStudent) } : {}),
+          ...(bootstrap.schedules ? { schedules: bootstrap.schedules.map(dbScheduleToSchedule) } : {}),
+          ...(bootstrap.scheduleFolders ? { scheduleFolders: bootstrap.scheduleFolders.map(dbScheduleFolderToScheduleFolder) } : {}),
+          ...(bootstrap.transactions ? { transactions: bootstrap.transactions.map(dbTransactionToTransaction) } : {}),
+          ...(bootstrap.categories ? { categories: bootstrap.categories.map(dbCategoryToCategory) } : {}),
           pockets: [
             { id: "pocket-kplus", name: "K PLUS", color: "emerald", isDefault: false },
             { id: "pocket-cash", name: "Cash", color: "blue", isDefault: false },
             { id: "pocket-truemoney", name: "TrueMoney", color: "amber", isDefault: false },
           ],
-          additionalCostRuns: additionalCosts.runs.map(dbAdditionalCostRunToAdditionalCostRun),
-          additionalCostItems: additionalCosts.items.map(dbAdditionalCostItemToAdditionalCostItem),
+          ...(bootstrap.additionalCostRuns ? { additionalCostRuns: bootstrap.additionalCostRuns.map(dbAdditionalCostRunToAdditionalCostRun) } : {}),
+          ...(bootstrap.additionalCostItems ? { additionalCostItems: bootstrap.additionalCostItems.map(dbAdditionalCostItemToAdditionalCostItem) } : {}),
         });
       } catch (e) {
         console.error("Hydration from Supabase failed", e);
         setHydrationError((e as Error).message || "ไม่สามารถเชื่อมต่อ Supabase");
       } finally {
-        if (!cancelled) markHydrated();
+        if (!cancelled) markResourcesLoaded(missingResources);
       }
     }
     hydrate();
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, setData, markHydrated, setHydrationError]);
+  }, [loadedResources, markResourcesLoaded, mergeData, pathname, setHydrationError]);
   return null;
 }

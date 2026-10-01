@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, memo, useCallback, use, useMemo, type DragEvent } from "react";
+import dynamic from "next/dynamic";
 import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, FolderPlus, Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAppStore } from "@/lib/store";
@@ -10,9 +11,16 @@ import { getFolderPath, getSortedSchedules } from "@/lib/schedules/grouping";
 import { createScheduleFolder, deleteScheduleFolder, updateScheduleFolder } from "@/lib/supabase/scheduleFolders";
 import { updateSchedule as updateScheduleRemote } from "@/lib/supabase/schedules";
 import { dbScheduleFolderToScheduleFolder, dbScheduleToSchedule } from "@/lib/supabase/adapter";
-import { AddScheduleModal } from "./AddScheduleModal";
-import { ScheduleDetailModal } from "./ScheduleDetailModal";
 import { ScheduleCalendar } from "./ScheduleCalendar";
+
+const AddScheduleModal = dynamic(
+  () => import("./AddScheduleModal").then((module) => module.AddScheduleModal),
+  { ssr: false }
+);
+const ScheduleDetailModal = dynamic(
+  () => import("./ScheduleDetailModal").then((module) => module.ScheduleDetailModal),
+  { ssr: false }
+);
 
 const ScheduleCard = memo(({
   schedule,

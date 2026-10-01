@@ -1,17 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { ArrowDownLeft, ArrowUpRight, Banknote, CircleDollarSign, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 import { calculateBalance, countStudentPaymentStatus } from "@/lib/calculations";
 import { useAppStore } from "@/lib/store";
@@ -20,6 +10,14 @@ import { cn } from "@/lib/utils";
 import { PocketList } from "@/components/pockets/PocketList";
 import type { DataBundle, PaymentMethod } from "@/types";
 import { getScheduleTargetTotal, getStudentScheduleRemaining, getStudentScheduleTarget } from "@/lib/additionalCosts";
+
+const DashboardCashflowChart = dynamic(
+  () => import("@/components/dashboard/DashboardCashflowChart").then((module) => module.DashboardCashflowChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-full w-full animate-pulse rounded-[18px] bg-zinc-100 dark:bg-zinc-800" />,
+  }
+);
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   kplus: "K PLUS",
@@ -254,11 +252,9 @@ export function DashboardOverview() {
                 </div>
               </div>
               <div className="mt-5 h-2 rounded-full bg-white/20">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${analytics.totalIncome + analytics.totalExpense > 0 ? Math.min(100, Math.round((analytics.totalIncome / (analytics.totalIncome + analytics.totalExpense)) * 100)) : 0}%` }}
-                  transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                  className="h-2 rounded-full bg-white"
+                <div
+                  className="h-2 rounded-full bg-white transition-[width] duration-700 motion-reduce:transition-none"
+                  style={{ width: `${analytics.totalIncome + analytics.totalExpense > 0 ? Math.min(100, Math.round((analytics.totalIncome / (analytics.totalIncome + analytics.totalExpense)) * 100)) : 0}%` }}
                 />
               </div>
             </div>
@@ -348,41 +344,7 @@ export function DashboardOverview() {
             </div>
 
             <div className="apple-soft h-48 rounded-[20px] p-2 sm:h-72 sm:rounded-[24px] sm:p-3 md:h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={analytics.daily} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line-strong)" vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis
-                    tickFormatter={(value: number) => money(value)}
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={12}
-                    width={48}
-                  />
-                  <Tooltip
-                    formatter={(value: number, name: string) => {
-                      const labels: Record<string, string> = {
-                        income: "รายรับ",
-                        expense: "รายจ่าย",
-                        net: "สุทธิ",
-                      };
-                      return [`${money(value)} ฿`, labels[name] || name];
-                    }}
-                    labelFormatter={(label) => `วันที่ ${label}`}
-                  />
-                  <Bar dataKey="income" fill="var(--cyan)" radius={[8, 8, 0, 0]} name="รายรับ" />
-                  <Bar dataKey="expense" fill="var(--danger)" radius={[8, 8, 0, 0]} name="รายจ่าย" />
-                  <Line
-                    type="monotone"
-                    dataKey="net"
-                    stroke="var(--primary)"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                    name="สุทธิ"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+              <DashboardCashflowChart data={analytics.daily} />
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.9fr)]">
@@ -508,10 +470,10 @@ function StatCard({ title, value, subtitle, tone, href, icon: Icon }: { title: s
   const toneClass = tone === "primary" ? "text-[var(--primary)]" : tone === "success" ? "text-[var(--success)]" : tone === "danger" ? "text-[var(--danger)]" : "text-[var(--primary)]";
 
   const content = (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -3 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+    <div
       className={cn(
-        "apple-soft h-full rounded-[18px] p-3 transition-all sm:rounded-[24px] sm:p-5",
-        href && "cursor-pointer hover:shadow-lg"
+        "apple-soft h-full rounded-[18px] p-3 transition-all duration-300 motion-reduce:transition-none sm:rounded-[24px] sm:p-5",
+        href && "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg"
       )}>
       <div className="mb-2 flex items-center justify-between gap-2 sm:mb-4">
         <div className="min-w-0 truncate text-xs font-medium text-muted sm:text-sm">{title}</div>
@@ -523,7 +485,7 @@ function StatCard({ title, value, subtitle, tone, href, icon: Icon }: { title: s
       </div>
       <div className="text-balance-safe text-lg font-bold tracking-tight sm:text-2xl">{value}</div>
       {subtitle && <div className="mt-1 line-clamp-1 text-[11px] text-muted sm:text-xs">{subtitle}</div>}
-    </motion.div>
+    </div>
   );
 
   if (href) {

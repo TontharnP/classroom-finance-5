@@ -1,5 +1,5 @@
 import { notFound, ok, serverError } from "@/lib/api/response";
-import { getRecord, listRecords, toNumber, type Row } from "@/lib/supabase/server";
+import { getRecord, getSupabaseAdmin, toNumber, type Row } from "@/lib/supabase/server";
 import { additionalCostKey, getAdditionalCostTotals } from "@/lib/server/additionalCosts";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -10,18 +10,22 @@ export async function GET(_request: Request, context: RouteContext) {
     const schedule = await getRecord<Row>("schedules", id);
     if (!schedule) return notFound("Schedule not found");
 
-    const [transactions, additionalCosts] = await Promise.all([
-      listRecords<Row>("transactions"),
+    const [transactionResult, additionalCosts] = await Promise.all([
+      getSupabaseAdmin()
+        .from("transactions")
+        .select("student_id,amount")
+        .eq("schedule_id", id)
+        .eq("source", "schedule")
+        .eq("kind", "income"),
       getAdditionalCostTotals(),
     ]);
+    if (transactionResult.error) throw transactionResult.error;
+    const transactions = (transactionResult.data ?? []) as Row[];
     const studentIds = Array.isArray(schedule.student_ids) ? schedule.student_ids.map(String) : [];
     const amountPerItem = toNumber(schedule.amount_per_item);
     const paidByStudent = new Map<string, number>();
     for (const transaction of transactions) {
       if (
-        transaction.schedule_id !== id ||
-        transaction.source !== "schedule" ||
-        transaction.kind !== "income" ||
         !transaction.student_id ||
         !studentIds.includes(String(transaction.student_id))
       ) continue;

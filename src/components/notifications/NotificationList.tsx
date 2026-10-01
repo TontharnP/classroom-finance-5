@@ -15,8 +15,8 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export function NotificationList() {
-  const { data: storeData } = useAppStore();
-  const { students, schedules } = storeData;
+  const students = useAppStore((state) => state.data.students);
+  const schedules = useAppStore((state) => state.data.schedules);
   const { data: requests, error, isLoading, mutate } = useSWR<LinePaymentRequest[]>(
     "/api/line/payment-requests?status=pending_review,pending_slip_review,cash_pending",
     fetcher

@@ -1,5 +1,5 @@
 import { ok, serverError } from "@/lib/api/response";
-import { listRecords, type Row } from "@/lib/supabase/server";
+import { getSupabaseAdmin, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest } from "@/lib/supabase/mappers";
 
 export async function GET(request: Request) {
@@ -7,15 +7,16 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const scheduleId = url.searchParams.get("scheduleId");
     const status = url.searchParams.get("status");
-    let rows = await listRecords<Row>("line_payment_requests");
-
-    if (scheduleId) rows = rows.filter((row) => row.schedule_id === scheduleId);
+    let query = getSupabaseAdmin().from("line_payment_requests").select("*");
+    if (scheduleId) query = query.eq("schedule_id", scheduleId);
     if (status) {
-      const statuses = new Set(status.split(",").map((item) => item.trim()).filter(Boolean));
-      rows = rows.filter((row) => statuses.has(String(row.status)));
+      const statuses = status.split(",").map((item) => item.trim()).filter(Boolean);
+      if (statuses.length > 0) query = query.in("status", statuses);
     }
 
-    rows.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    const { data, error } = await query.order("created_at", { ascending: false });
+    if (error) throw error;
+    const rows = (data ?? []) as Row[];
     return ok(rows.map(mapLinePaymentRequest));
   } catch (error) {
     return serverError(error);

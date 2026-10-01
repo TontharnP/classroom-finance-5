@@ -3,7 +3,7 @@ import {
   createRecord,
   emptyToNull,
   ensureScheduleFolderSchema,
-  listRecords,
+  getSupabaseAdmin,
   type Row,
 } from "@/lib/supabase/server";
 import { mapSchedule } from "@/lib/supabase/mappers";
@@ -15,9 +15,14 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const active = url.searchParams.get("active") === "true";
     const today = new Date().toISOString().split("T")[0];
-    const rows = (await listRecords<Row>("schedules"))
-      .filter((schedule) => !active || !schedule.end_date || String(schedule.end_date) >= today)
-      .sort(compareSchedules);
+    let query = getSupabaseAdmin().from("schedules").select("*");
+    if (active) query = query.or(`end_date.is.null,end_date.gte.${today}`);
+    const { data, error } = await query
+      .order("folder_id", { ascending: true })
+      .order("sort_order", { ascending: true })
+      .order("start_date", { ascending: false });
+    if (error) throw error;
+    const rows = (data ?? []) as Row[];
     return ok(rows.map(mapSchedule));
   } catch (error) {
     return serverError(error);
@@ -47,23 +52,13 @@ export async function POST(request: Request) {
 }
 
 async function nextScheduleSortOrder(folderId: string) {
-  const schedules = await listRecords<Row>("schedules");
-  return (
-    Math.max(
-      -1,
-      ...schedules
-        .filter((schedule) => schedule.folder_id === folderId)
-        .map((schedule) => Number(schedule.sort_order ?? 0))
-    ) + 1
-  );
-}
-
-function compareSchedules(a: Row, b: Row) {
-  const folderComparison = String(a.folder_id ?? "").localeCompare(String(b.folder_id ?? ""));
-  if (folderComparison !== 0) return folderComparison;
-
-  const sortComparison = Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
-  if (sortComparison !== 0) return sortComparison;
-
-  return String(b.start_date ?? "").localeCompare(String(a.start_date ?? ""));
+  const { data, error } = await getSupabaseAdmin()
+    .from("schedules")
+    .select("sort_order")
+    .eq("folder_id", folderId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return Number(data?.sort_order ?? -1) + 1;
 }

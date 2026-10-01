@@ -1,35 +1,53 @@
 import "server-only";
 
-import { listRecords, type Row } from "@/lib/supabase/server";
+import { getSupabaseAdmin, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
 import { additionalCostKey, getAdditionalCostTotals } from "@/lib/server/additionalCosts";
 
 export async function getStudentLineStatus(lineUserId: string) {
-  const [studentRows, scheduleRows, transactionRows, requestRows, additionalCosts] = await Promise.all([
-    listRecords<Row>("students"),
-    listRecords<Row>("schedules"),
-    listRecords<Row>("transactions"),
-    listRecords<Row>("line_payment_requests"),
-    getAdditionalCostTotals(),
-  ]);
-  const student = studentRows.map(mapStudent).find((item) => item.line_user_id === lineUserId);
-  if (!student) return null;
+  const { data: studentRow, error: studentError } = await getSupabaseAdmin()
+    .from("students")
+    .select("*")
+    .eq("line_user_id", lineUserId)
+    .order("number", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (studentError) throw studentError;
+  if (!studentRow) return null;
+  const student = mapStudent(studentRow as Row);
 
-  const transactions = transactionRows.map(mapTransaction);
-  const schedules = scheduleRows.map(mapSchedule).filter((schedule) => schedule.student_ids.includes(student.id));
+  const [scheduleResult, transactionResult, requestResult, additionalCosts] = await Promise.all([
+    getSupabaseAdmin().from("schedules").select("*").contains("student_ids", [student.id]),
+    getSupabaseAdmin()
+      .from("transactions")
+      .select("schedule_id,student_id,amount,source,kind")
+      .eq("student_id", student.id)
+      .eq("source", "schedule")
+      .eq("kind", "income"),
+    getSupabaseAdmin()
+      .from("line_payment_requests")
+      .select("*")
+      .eq("line_user_id", lineUserId)
+      .in("status", ["pending_slip_review", "pending_review", "cash_pending"]),
+    getAdditionalCostTotals({ studentId: student.id }),
+  ]);
+  if (scheduleResult.error) throw scheduleResult.error;
+  if (transactionResult.error) throw transactionResult.error;
+  if (requestResult.error) throw requestResult.error;
+
+  const transactionRows = (transactionResult.data ?? []) as Row[];
+  const schedules = ((scheduleResult.data ?? []) as Row[]).map(mapSchedule);
   const debts = schedules
     .map((schedule) => {
-      const paid = transactions
-        .filter((transaction) => transaction.source === "schedule" && transaction.schedule_id === schedule.id && transaction.student_id === student.id)
-        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      const paid = transactionRows
+        .filter((transaction) => transaction.schedule_id === schedule.id)
+        .reduce((sum, transaction) => sum + Number(transaction.amount ?? 0), 0);
       const target = schedule.amount_per_item + (additionalCosts.get(additionalCostKey(schedule.id, student.id)) || 0);
       return { schedule, remaining: Math.max(0, Math.round((target - paid) * 100) / 100) };
     })
     .filter((item) => item.remaining > 0)
     .sort((a, b) => String(a.schedule.end_date || a.schedule.start_date).localeCompare(String(b.schedule.end_date || b.schedule.start_date)));
-  const pendingReviews = requestRows
-    .map(mapLinePaymentRequest)
-    .filter((request) => request.line_user_id === lineUserId && ["pending_slip_review", "pending_review", "cash_pending"].includes(request.status));
+  const pendingReviews = ((requestResult.data ?? []) as Row[]).map(mapLinePaymentRequest);
 
   return {
     student,
@@ -40,22 +58,36 @@ export async function getStudentLineStatus(lineUserId: string) {
 }
 
 export async function getStudentLineHistory(lineUserId: string) {
-  const [studentRows, scheduleRows, transactionRows] = await Promise.all([
-    listRecords<Row>("students"),
-    listRecords<Row>("schedules"),
-    listRecords<Row>("transactions"),
-  ]);
-  const student = studentRows.map(mapStudent).find((item) => item.line_user_id === lineUserId);
-  if (!student) return null;
+  const { data: studentRow, error: studentError } = await getSupabaseAdmin()
+    .from("students")
+    .select("*")
+    .eq("line_user_id", lineUserId)
+    .order("number", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (studentError) throw studentError;
+  if (!studentRow) return null;
+  const student = mapStudent(studentRow as Row);
 
-  const scheduleById = new Map(scheduleRows.map((row) => {
+  const { data: transactionRows, error: transactionError } = await getSupabaseAdmin()
+    .from("transactions")
+    .select("*")
+    .eq("student_id", student.id)
+    .eq("source", "schedule")
+    .eq("kind", "income")
+    .order("created_at", { ascending: false });
+  if (transactionError) throw transactionError;
+  const transactions = ((transactionRows ?? []) as Row[]).map(mapTransaction);
+  const scheduleIds = Array.from(new Set(transactions.map((transaction) => transaction.schedule_id).filter(Boolean))) as string[];
+  const scheduleResult = scheduleIds.length > 0
+    ? await getSupabaseAdmin().from("schedules").select("*").in("id", scheduleIds)
+    : { data: [], error: null };
+  if (scheduleResult.error) throw scheduleResult.error;
+
+  const scheduleById = new Map(((scheduleResult.data ?? []) as Row[]).map((row) => {
     const schedule = mapSchedule(row);
     return [schedule.id, schedule];
   }));
-  const transactions = transactionRows
-    .map(mapTransaction)
-    .filter((transaction) => transaction.source === "schedule" && transaction.kind === "income" && transaction.student_id === student.id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return { student, transactions, scheduleById };
 }
