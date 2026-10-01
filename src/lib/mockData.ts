@@ -91,6 +91,8 @@ export function mockData(): DataBundle {
     students,
     schedules,
     scheduleFolders: [{ id: "schedule-folder-default", name: "Default", sortOrder: 0, isHidden: false }],
+    additionalCostRuns: [],
+    additionalCostItems: [],
     transactions,
     categories: [],
     pockets,

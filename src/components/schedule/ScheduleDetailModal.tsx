@@ -15,6 +15,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EditScheduleModal } from "./EditScheduleModal";
 import { QuickPayModal } from "../transactions/QuickPayModal";
 import { TransactionSlipButton } from "../transactions/TransactionSlipButton";
+import { getAdditionalCostAmount, getScheduleTargetTotal, getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 type ScheduleDetailModalProps = {
   isOpen: boolean;
@@ -62,10 +63,10 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
     () =>
       new Set(
         Object.entries(perStudentTotals)
-          .filter(([, total]) => total >= schedule.amountPerItem)
+          .filter(([studentId, total]) => total >= getStudentScheduleTarget(data, schedule, studentId))
           .map(([studentId]) => studentId)
       ),
-    [perStudentTotals, schedule.amountPerItem]
+    [data, perStudentTotals, schedule]
   );
   const latestTransactionByStudent = useMemo(() => {
     const latest = new Map<string, (typeof scheduleTransactions)[number]>();
@@ -91,8 +92,11 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
   const paidCount = paidStudentIds.size;
   const unpaidCount = totalStudents - paidCount;
   const totalCollected = scheduleTransactions.reduce((sum, t) => sum + t.amount, 0);
-  const targetAmount = schedule.amountPerItem * totalStudents;
-  const totalRemaining = Math.max(0, targetAmount - totalCollected);
+  const targetAmount = getScheduleTargetTotal(data, schedule);
+  const totalRemaining = scheduleStudents.reduce(
+    (sum, student) => sum + Math.max(0, getStudentScheduleTarget(data, schedule, student.id) - (perStudentTotals[student.id] || 0)),
+    0
+  );
   const unpaidStudents = scheduleStudents.filter((student) => !paidStudentIds.has(student.id));
   const unpaidStudentsWithLine = unpaidStudents.filter((student) => Boolean(student.lineUserId));
   const missingLineCount = unpaidStudents.length - unpaidStudentsWithLine.length;
@@ -528,8 +532,10 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                     filteredStudents.map((student, idx) => {
 
                       const totalPaid = perStudentTotals[student.id] || 0;
-                      const hasPaid = totalPaid >= schedule.amountPerItem;
-                      const remain = Math.max(0, schedule.amountPerItem - totalPaid);
+                      const targetForStudent = getStudentScheduleTarget(data, schedule, student.id);
+                      const additionalCost = getAdditionalCostAmount(data.additionalCostItems, schedule.id, student.id);
+                      const hasPaid = totalPaid >= targetForStudent;
+                      const remain = Math.max(0, targetForStudent - totalPaid);
                       const latestPaidTransaction = latestTransactionByStudent.get(student.id);
                       return (
                         <motion.div
@@ -566,6 +572,11 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                               <div className="text-sm text-zinc-600 dark:text-zinc-400">
                                 เลขที่ {student.number} • {student.nickName}
                               </div>
+                              {additionalCost > 0 && (
+                                <div className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                  ยอดรวม {targetForStudent.toLocaleString()} ฿ (เพิ่ม {additionalCost.toLocaleString()} ฿)
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center justify-between gap-2 text-right sm:justify-end">

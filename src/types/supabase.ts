@@ -37,6 +37,28 @@ export type ScheduleFolder = {
   updated_at: string;
 };
 
+export type AdditionalCostRun = {
+  id: string;
+  request_key: string;
+  percentage: number;
+  affected_student_count: number;
+  overdue_item_count: number;
+  base_total: number;
+  additional_total: number;
+  created_at: string;
+};
+
+export type AdditionalCostItem = {
+  id: string;
+  run_id: string;
+  schedule_id: string;
+  student_id: string;
+  base_outstanding: number;
+  percentage: number;
+  amount: number;
+  created_at: string;
+};
+
 // Transaction type matching database schema
 // Note: "bank" is included for backward compatibility during migration
 export type Transaction = {

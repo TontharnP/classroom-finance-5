@@ -11,6 +11,7 @@ import { createTransactions } from "@/lib/supabase/transactions";
 import { dbTransactionToTransaction } from "@/lib/supabase/adapter";
 import type { TransactionInput } from "@/types/supabase";
 import toast from "react-hot-toast";
+import { getStudentScheduleRemaining, getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 const schema = z.object({
   scheduleId: z.string().min(1, "กรุณาเลือกกำหนดการ"),
@@ -51,6 +52,17 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
   const orderedSchedules = getSchedulesInSystemOrder(data);
   const selectedSchedule = data.schedules.find((s) => s.id === selectedScheduleId);
   const totalAmount = rows.reduce((s, r) => s + (Number.isFinite(r.amount) ? r.amount : 0), 0);
+  const scheduleStudents = selectedSchedule
+    ? data.students.filter((student) => selectedSchedule.studentIds.includes(student.id))
+    : [];
+  const selectedRemaining = selectedSchedule
+    ? selectedStudents.map((studentId) => getStudentScheduleRemaining(data, selectedSchedule, studentId))
+    : [];
+  const expectedTotal = selectedSchedule
+    ? selectedRemaining.length > 0
+      ? Math.min(...selectedRemaining)
+      : selectedSchedule.amountPerItem
+    : 0;
 
   const onSubmit: SubmitHandler<FormData> = async (formData) => {
     setSubmitted(true);
@@ -63,7 +75,6 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
     }
 
     // Validate total is positive and not exceeding schedule amount
-    const expectedTotal = selectedSchedule.amountPerItem;
     if (totalAmount <= 0) {
       toast.error("กรุณากรอกจำนวนเงิน");
       return;
@@ -97,7 +108,7 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
       created.forEach((db) => addTransaction(dbTransactionToTransaction(db)));
       const remain = Math.max(0, Math.round((expectedTotal - totalAmount) * 100) / 100);
       if (remain > 0) {
-        toast.success(`บันทึกแล้ว ค้างอีกคนละ ${remain.toLocaleString()} ฿`);
+        toast.success(`บันทึกแล้ว ยอดค้างต่ำสุดหลังรายการนี้ ${remain.toLocaleString()} ฿`);
       } else {
         toast.success(`บันทึก ${created.length} รายการเรียบร้อย`);
       }
@@ -117,7 +128,15 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
 
       <div>
         <label className="mb-1 block text-sm font-medium">กำหนดการ</label>
-        <select {...register("scheduleId")} className="w-full rounded-md border px-3 py-2">
+        <select
+          {...register("scheduleId", {
+            onChange: () => {
+              setSelectedStudents([]);
+              setRows([{ method: "cash", amount: 0 }]);
+            },
+          })}
+          className="w-full rounded-md border px-3 py-2"
+        >
           <option value="">เลือกกำหนดการ</option>
           {orderedSchedules.map((s) => (
             <option key={s.id} value={s.id}>
@@ -131,7 +150,12 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
       {selectedSchedule && (
         <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
           <div className="text-sm">
-            <strong>จำนวนที่ต้องเก็บ:</strong> {selectedSchedule.amountPerItem} ฿
+            <strong>ยอดตั้งต้นต่อคน:</strong> {selectedSchedule.amountPerItem.toLocaleString()} ฿
+            {selectedStudents.length > 0 && (
+              <div className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                ชำระได้สูงสุดคนละ {expectedTotal.toLocaleString()} ฿ สำหรับนักเรียนที่เลือก
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -139,20 +163,26 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
       <div>
         <label className="mb-1 block text-sm font-medium">เลือกนักเรียน</label>
         <div className="max-h-60 space-y-2 overflow-y-auto rounded-md border p-3">
-          {data.students.map((student) => (
+          {scheduleStudents.map((student) => {
+            const remaining = selectedSchedule ? getStudentScheduleRemaining(data, selectedSchedule, student.id) : 0;
+            const target = selectedSchedule ? getStudentScheduleTarget(data, selectedSchedule, student.id) : 0;
+            return (
             <label key={student.id} className="flex items-center gap-2">
               <input
                 type="checkbox"
                 value={student.id}
                 checked={selectedStudents.includes(student.id)}
                 onChange={() => toggleStudent(student.id)}
+                disabled={remaining <= 0}
                 className="rounded"
               />
               <span className="text-sm">
                 {student.number}. {student.firstName} ({student.nickName})
+                <span className="ml-1 text-xs text-muted">• ค้าง {remaining.toLocaleString()} / {target.toLocaleString()} ฿</span>
               </span>
             </label>
-          ))}
+            );
+          })}
         </div>
         {submitted && selectedStudents.length === 0 && (
           <p className="mt-1 text-sm text-red-600">กรุณาเลือกนักเรียนอย่างน้อย 1 คน</p>
@@ -162,7 +192,7 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium">
-            การชำระเงิน (รวมต้องเท่ากับ {selectedSchedule?.amountPerItem.toLocaleString() || 0} ฿)
+            การชำระเงินต่อคน (สูงสุด {expectedTotal.toLocaleString()} ฿)
           </label>
           <button
             type="button"
@@ -212,13 +242,13 @@ export function ScheduleTransactionForm({ onSuccess, onBack }: Props) {
         ))}
         <div className="text-right text-sm text-zinc-600 dark:text-zinc-400 space-y-0.5">
           <div>
-            รวมที่กรอก: <span className={selectedSchedule && totalAmount > 0 && totalAmount <= selectedSchedule.amountPerItem ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-rose-600 dark:text-rose-400 font-medium"}>{totalAmount.toLocaleString()}</span> ฿
+            รวมที่กรอก: <span className={selectedSchedule && totalAmount > 0 && totalAmount <= expectedTotal ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-rose-600 dark:text-rose-400 font-medium"}>{totalAmount.toLocaleString()}</span> ฿
           </div>
-          {selectedSchedule && totalAmount > 0 && totalAmount < selectedSchedule.amountPerItem && (
-            <div className="text-xs text-amber-600 dark:text-amber-400">ค้างอีก {Math.round((selectedSchedule.amountPerItem - totalAmount) * 100) / 100} ฿</div>
+          {selectedSchedule && totalAmount > 0 && totalAmount < expectedTotal && (
+            <div className="text-xs text-amber-600 dark:text-amber-400">อย่างน้อยหนึ่งคนจะค้างอีก {Math.round((expectedTotal - totalAmount) * 100) / 100} ฿</div>
           )}
-          {selectedSchedule && totalAmount > selectedSchedule.amountPerItem && (
-            <div className="text-xs text-red-600">เกิน {Math.round((totalAmount - selectedSchedule.amountPerItem) * 100) / 100} ฿</div>
+          {selectedSchedule && totalAmount > expectedTotal && (
+            <div className="text-xs text-red-600">เกินยอดค้างต่ำสุด {Math.round((totalAmount - expectedTotal) * 100) / 100} ฿</div>
           )}
         </div>
       </div>

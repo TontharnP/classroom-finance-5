@@ -55,6 +55,27 @@ export interface ScheduleFolder {
   isHidden?: boolean;
 }
 
+export interface AdditionalCostRun {
+  id: string;
+  percentage: number;
+  affectedStudentCount: number;
+  overdueItemCount: number;
+  baseTotal: number;
+  additionalTotal: number;
+  createdAt: string;
+}
+
+export interface AdditionalCostItem {
+  id: string;
+  runId: string;
+  scheduleId: string;
+  studentId: string;
+  baseOutstanding: number;
+  percentage: number;
+  amount: number;
+  createdAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -114,4 +135,6 @@ export interface DataBundle {
   linePaymentRequests?: LinePaymentRequest[];
   categories: Category[];
   pockets: Pocket[];
+  additionalCostRuns: AdditionalCostRun[];
+  additionalCostItems: AdditionalCostItem[];
 }

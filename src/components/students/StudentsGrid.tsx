@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAppStore } from "@/lib/store";
+import { getStudentScheduleTarget } from "@/lib/additionalCosts";
 import { sendScheduleLineReminders } from "@/lib/supabase/schedules";
 import type { Student } from "@/types";
 import { AddStudentModal } from "./AddStudentModal";
@@ -201,10 +202,11 @@ export function StudentsGrid() {
       const schedulesForStudent = storeData.schedules.filter((s) => s.studentIds.includes(student.id));
 
       for (const schedule of schedulesForStudent) {
-        targetTotal += schedule.amountPerItem;
+        const targetForStudent = getStudentScheduleTarget(storeData, schedule, student.id);
+        targetTotal += targetForStudent;
         const paidForThis = paidBySchedule[schedule.id]?.[student.id] || 0;
-        const remaining = Math.max(0, schedule.amountPerItem - paidForThis);
-        paidCappedTotal += Math.min(paidForThis, schedule.amountPerItem);
+        const remaining = Math.max(0, targetForStudent - paidForThis);
+        paidCappedTotal += Math.min(paidForThis, targetForStudent);
 
         if (remaining === 0) {
           paidCount += 1;

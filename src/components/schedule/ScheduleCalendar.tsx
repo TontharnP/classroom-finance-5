@@ -8,6 +8,7 @@ import { format, isBefore, isSameDay, parseISO, startOfDay } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { getSchedulesInSystemOrder } from "@/lib/schedules/grouping";
 import { countStudentPaymentStatus } from "@/lib/calculations";
+import { getScheduleTargetTotal, getStudentScheduleRemaining } from "@/lib/additionalCosts";
 import type { Schedule } from "@/types";
 
 type ScheduleCalendarProps = {
@@ -39,11 +40,14 @@ export function ScheduleCalendar({ onScheduleClick }: ScheduleCalendarProps) {
   const scheduleStatus = new Map(
     orderedSchedules.map((schedule) => {
       const payment = countStudentPaymentStatus(data, schedule.id);
-      const target = schedule.amountPerItem * schedule.studentIds.length;
+      const target = getScheduleTargetTotal(data, schedule);
       const collected = data.transactions
         .filter((transaction) => transaction.source === "schedule" && transaction.scheduleId === schedule.id)
         .reduce((sum, transaction) => sum + transaction.amount, 0);
-      const remaining = Math.max(0, target - collected);
+      const remaining = schedule.studentIds.reduce(
+        (sum, studentId) => sum + getStudentScheduleRemaining(data, schedule, studentId),
+        0
+      );
       const dueDate = schedule.endDate ? startOfDay(parseISO(schedule.endDate)) : startOfDay(parseISO(schedule.startDate));
       const isOverdue = remaining > 0 && isBefore(dueDate, today);
       return [schedule.id, { ...payment, target, collected, remaining, dueDate, isOverdue }];

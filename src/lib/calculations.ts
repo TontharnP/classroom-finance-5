@@ -1,4 +1,5 @@
 import { DataBundle, Transaction } from "@/types";
+import { getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 interface BalanceSummary {
   balance: number;
@@ -222,7 +223,7 @@ export function countStudentPaymentStatus(
 ): { paid: number; unpaid: number } {
   const schedule = data.schedules.find((s) => s.id === scheduleId);
   if (!schedule) return { paid: 0, unpaid: 0 };
-  // Aggregate amounts per student and treat as paid only if total >= amountPerItem
+  // Aggregate amounts per student and compare against the base amount plus any applied late charges.
   const perStudentTotals: Record<string, number> = {};
   for (const t of data.transactions) {
     if (t.source === "schedule" && t.scheduleId === scheduleId && t.studentId) {
@@ -231,7 +232,7 @@ export function countStudentPaymentStatus(
   }
   let paid = 0;
   for (const studentId of schedule.studentIds) {
-    if ((perStudentTotals[studentId] || 0) >= schedule.amountPerItem) paid++;
+    if ((perStudentTotals[studentId] || 0) >= getStudentScheduleTarget(data, schedule, studentId)) paid++;
   }
   const unpaid = schedule.studentIds.length - paid;
   return { paid, unpaid };

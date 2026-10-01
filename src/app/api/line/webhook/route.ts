@@ -22,6 +22,7 @@ import {
   paymentDebtButton,
   type LineFlexBox,
 } from "@/lib/server/lineFlex";
+import { additionalCostKey, getAdditionalCostTotals } from "@/lib/server/additionalCosts";
 
 const PROMPTPAY_ID = "004666006046829";
 
@@ -752,9 +753,10 @@ async function showClassroomTotal(event: LineWebhookEvent) {
 }
 
 async function getStudentPaymentOverview(studentId: string) {
-  const [scheduleRows, transactionRows] = await Promise.all([
+  const [scheduleRows, transactionRows, additionalCosts] = await Promise.all([
     listRecords<Row>("schedules"),
     listRecords<Row>("transactions"),
+    getAdditionalCostTotals(),
   ]);
   const schedules = scheduleRows.map(mapSchedule).filter((schedule) => schedule.student_ids.includes(studentId));
   const transactions = transactionRows.map(mapTransaction);
@@ -763,7 +765,8 @@ async function getStudentPaymentOverview(studentId: string) {
       const paid = transactions
         .filter((transaction) => transaction.source === "schedule" && transaction.kind === "income" && transaction.schedule_id === schedule.id && transaction.student_id === studentId)
         .reduce((sum, transaction) => sum + transaction.amount, 0);
-      return { schedule, remaining: Math.max(0, Math.round((schedule.amount_per_item - paid) * 100) / 100) };
+      const target = schedule.amount_per_item + (additionalCosts.get(additionalCostKey(schedule.id, studentId)) || 0);
+      return { schedule, remaining: Math.max(0, Math.round((target - paid) * 100) / 100) };
     })
     .sort((a, b) => String(a.schedule.end_date || a.schedule.start_date).localeCompare(String(b.schedule.end_date || b.schedule.start_date)));
 
@@ -943,9 +946,10 @@ async function getStudentByLineUserId(lineUserId: string | undefined) {
 }
 
 async function getUnpaidSchedulesForStudent(studentId: string) {
-  const [scheduleRows, transactionRows] = await Promise.all([
+  const [scheduleRows, transactionRows, additionalCosts] = await Promise.all([
     listRecords<Row>("schedules"),
     listRecords<Row>("transactions"),
+    getAdditionalCostTotals(),
   ]);
   const schedules = scheduleRows.map(mapSchedule).filter((schedule) => schedule.student_ids.includes(studentId));
   const transactions = transactionRows.map(mapTransaction);
@@ -958,7 +962,7 @@ async function getUnpaidSchedulesForStudent(studentId: string) {
       return {
         schedule,
         paid,
-        remaining: Math.max(0, Math.round((schedule.amount_per_item - paid) * 100) / 100),
+        remaining: Math.max(0, Math.round((schedule.amount_per_item + (additionalCosts.get(additionalCostKey(schedule.id, studentId)) || 0) - paid) * 100) / 100),
       };
     })
     .filter((item) => item.remaining > 0)

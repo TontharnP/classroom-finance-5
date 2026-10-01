@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 interface ConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   message: string;
   confirmText?: string;
@@ -29,6 +29,8 @@ export function ConfirmDialog({
     try {
       await onConfirm();
       onClose();
+    } catch {
+      // The action owns its user-facing error message; keep the dialog open for retry.
     } finally {
       setIsLoading(false);
     }

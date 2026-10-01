@@ -19,6 +19,7 @@ import { getFolderPath, getSchedulesInSystemOrder } from "@/lib/schedules/groupi
 import { cn } from "@/lib/utils";
 import { PocketList } from "@/components/pockets/PocketList";
 import type { DataBundle, PaymentMethod } from "@/types";
+import { getScheduleTargetTotal, getStudentScheduleRemaining, getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   kplus: "K PLUS",
@@ -116,7 +117,7 @@ function buildDashboardAnalytics(data: DataBundle, month: string) {
 
   const scheduleProgress: ScheduleProgress[] = getSchedulesInSystemOrder(data)
     .map((schedule) => {
-      const target = schedule.amountPerItem * schedule.studentIds.length;
+      const target = getScheduleTargetTotal(data, schedule);
       const perStudentTotals: Record<string, number> = {};
       let collected = 0;
 
@@ -135,9 +136,10 @@ function buildDashboardAnalytics(data: DataBundle, month: string) {
         }
       }
 
-      const paid = schedule.studentIds.filter((studentId) => (perStudentTotals[studentId] || 0) >= schedule.amountPerItem).length;
-      const remaining = Math.max(0, target - collected);
-      const percent = target > 0 ? Math.min(100, Math.round((collected / target) * 100)) : 0;
+      const paid = schedule.studentIds.filter((studentId) => (perStudentTotals[studentId] || 0) >= getStudentScheduleTarget(data, schedule, studentId)).length;
+      const remaining = schedule.studentIds.reduce((sum, studentId) => sum + getStudentScheduleRemaining(data, schedule, studentId), 0);
+      const credited = Math.max(0, target - remaining);
+      const percent = target > 0 ? Math.min(100, Math.round((credited / target) * 100)) : 0;
 
       return {
         id: schedule.id,

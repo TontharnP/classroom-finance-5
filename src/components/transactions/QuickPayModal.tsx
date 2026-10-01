@@ -8,6 +8,7 @@ import { dbTransactionToTransaction } from "@/lib/supabase/adapter";
 import toast from "react-hot-toast";
 import { QRCodeCanvas } from "qrcode.react";
 import generatePayload from "promptpay-qr";
+import { getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 const PROMPTPAY_ID = "004666006046829";
 
@@ -40,7 +41,8 @@ export function QuickPayModal({ isOpen, onClose, scheduleId, studentId }: Props)
   const alreadyPaid = data.transactions
     .filter((t) => t.source === "schedule" && t.scheduleId === scheduleId && t.studentId === studentId)
     .reduce((sum, t) => sum + t.amount, 0);
-  const remaining = schedule ? Math.max(0, schedule.amountPerItem - alreadyPaid) : 0;
+  const target = schedule ? getStudentScheduleTarget(data, schedule, studentId) : 0;
+  const remaining = Math.max(0, Math.round((target - alreadyPaid) * 100) / 100);
 
   const totalEntered = rows.reduce((s, r) => s + (Number.isFinite(r.amount) ? r.amount : 0), 0);
   const remainingAfter = Math.max(0, remaining - totalEntered);
@@ -115,7 +117,7 @@ export function QuickPayModal({ isOpen, onClose, scheduleId, studentId }: Props)
           <div className="text-sm text-zinc-600 dark:text-zinc-400">กำหนดการ</div>
           <div className="font-semibold">{schedule.name}</div>
           <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">ผู้ชำระ: {student.firstName} ({student.nickName})</div>
-          <div className="mt-2 text-lg font-bold text-emerald-600 dark:text-emerald-400">{schedule.amountPerItem.toLocaleString()} ฿</div>
+          <div className="mt-2 text-lg font-bold text-emerald-600 dark:text-emerald-400">{target.toLocaleString()} ฿</div>
           <div className="mt-1 text-sm">
             ชำระแล้ว: <span className="font-medium text-blue-600 dark:text-blue-400">{alreadyPaid.toLocaleString()}</span> ฿
             <span className="mx-1">•</span>

@@ -2,8 +2,8 @@
  * Adapter to convert between UI types (camelCase) and database types (snake_case)
  */
 
-import type { Student as UIStudent, Schedule as UISchedule, ScheduleFolder as UIScheduleFolder, Transaction as UITransaction, Category as UICategory, LinePaymentRequest as UILinePaymentRequest } from "@/types";
-import type { Student as DbStudent, Schedule as DbSchedule, ScheduleFolder as DbScheduleFolder, Transaction as DbTransaction, LinePaymentRequest as DbLinePaymentRequest } from "@/types/supabase";
+import type { Student as UIStudent, Schedule as UISchedule, ScheduleFolder as UIScheduleFolder, Transaction as UITransaction, Category as UICategory, LinePaymentRequest as UILinePaymentRequest, AdditionalCostRun as UIAdditionalCostRun, AdditionalCostItem as UIAdditionalCostItem } from "@/types";
+import type { Student as DbStudent, Schedule as DbSchedule, ScheduleFolder as DbScheduleFolder, Transaction as DbTransaction, LinePaymentRequest as DbLinePaymentRequest, AdditionalCostRun as DbAdditionalCostRun, AdditionalCostItem as DbAdditionalCostItem } from "@/types/supabase";
 import type { Category as DbCategory } from "@/types/supabase-category";
 
 // Student adapters
@@ -78,6 +78,31 @@ export function scheduleFolderToDbScheduleFolder(
     parent_id: folder.parentId,
     sort_order: folder.sortOrder,
     is_hidden: folder.isHidden,
+  };
+}
+
+export function dbAdditionalCostRunToAdditionalCostRun(db: DbAdditionalCostRun): UIAdditionalCostRun {
+  return {
+    id: db.id,
+    percentage: db.percentage,
+    affectedStudentCount: db.affected_student_count,
+    overdueItemCount: db.overdue_item_count,
+    baseTotal: db.base_total,
+    additionalTotal: db.additional_total,
+    createdAt: db.created_at,
+  };
+}
+
+export function dbAdditionalCostItemToAdditionalCostItem(db: DbAdditionalCostItem): UIAdditionalCostItem {
+  return {
+    id: db.id,
+    runId: db.run_id,
+    scheduleId: db.schedule_id,
+    studentId: db.student_id,
+    baseOutstanding: db.base_outstanding,
+    percentage: db.percentage,
+    amount: db.amount,
+    createdAt: db.created_at,
   };
 }
 

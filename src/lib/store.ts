@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { DataBundle, Student, Schedule, ScheduleFolder, Transaction, Category, Pocket } from "@/types";
+import { DataBundle, Student, Schedule, ScheduleFolder, Transaction, Category, Pocket, AdditionalCostRun, AdditionalCostItem } from "@/types";
 
 interface AppState {
   data: DataBundle;
@@ -26,11 +26,12 @@ interface AppState {
   addPocket: (pocket: Pocket) => void;
   updatePocket: (id: string, pocket: Partial<Pocket>) => void;
   deletePocket: (id: string) => void;
+  addAdditionalCostRun: (run: AdditionalCostRun, items: AdditionalCostItem[]) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
   // Start empty; we'll hydrate from the database on app load
-  data: { students: [], schedules: [], scheduleFolders: [], transactions: [], categories: [], pockets: [] },
+  data: { students: [], schedules: [], scheduleFolders: [], transactions: [], categories: [], pockets: [], additionalCostRuns: [], additionalCostItems: [] },
   isHydrated: false,
   hydrationError: null,
   setData: (bundle) => set(() => ({ data: bundle })),
@@ -190,6 +191,15 @@ export const useAppStore = create<AppState>((set) => ({
       data: {
         ...state.data,
         pockets: state.data.pockets.filter((p) => p.id !== id),
+      },
+    })),
+
+  addAdditionalCostRun: (run, items) =>
+    set((state) => ({
+      data: {
+        ...state.data,
+        additionalCostRuns: [run, ...state.data.additionalCostRuns],
+        additionalCostItems: [...items, ...state.data.additionalCostItems],
       },
     })),
 }));

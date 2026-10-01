@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { useAppStore } from "@/lib/store";
 import type { DataBundle, Schedule, ScheduleFolder } from "@/types";
 import { countStudentPaymentStatus } from "@/lib/calculations";
+import { getScheduleTargetTotal } from "@/lib/additionalCosts";
 import { getFolderPath, getSortedSchedules } from "@/lib/schedules/grouping";
 import { createScheduleFolder, deleteScheduleFolder, updateScheduleFolder } from "@/lib/supabase/scheduleFolders";
 import { updateSchedule as updateScheduleRemote } from "@/lib/supabase/schedules";
@@ -27,7 +28,7 @@ const ScheduleCard = memo(({
   onDropOnSchedule: (targetScheduleId: string) => void;
 }) => {
   const status = countStudentPaymentStatus(data, schedule.id);
-  const totalAmount = schedule.amountPerItem * schedule.studentIds.length;
+  const totalAmount = getScheduleTargetTotal(data, schedule);
   const collectedAmount = data.transactions
     .filter((t) => t.source === "schedule" && t.scheduleId === schedule.id)
     .reduce((sum, t) => sum + t.amount, 0);

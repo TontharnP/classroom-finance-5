@@ -72,6 +72,14 @@ The app is intentionally conservative around payment correctness. QR, image hash
 - Shows per-student debt status.
 - Uploads profile images through Vercel Blob.
 
+### Additional Costs
+
+- Finds unpaid student balances whose schedule end date has passed.
+- Lets the treasurer manually apply a percentage-based late charge at any time.
+- Calculates and rounds the charge for each student/schedule debt before summing the total.
+- Adds applied charges to schedule balances used by the web UI, Quick Pay, and LINE payment flows.
+- Keeps an immutable run and item history for auditability.
+
 ### Categories and Pockets
 
 - Categories group transactions.
@@ -282,6 +290,7 @@ Apply migrations in numeric order from `supabase/migrations`.
 009_add_slip_review_fields.sql
 010_add_slip_transaction_id.sql
 011_add_line_payment_slip_archives.sql
+012_add_additional_costs.sql
 ```
 
 Important tables:
@@ -295,6 +304,8 @@ Important tables:
 | `line_payment_slip_archives` | Approved-slip metadata after request deletion |
 | `categories` | Transaction categories |
 | `schedule_folders` | Schedule grouping |
+| `additional_cost_runs` | Audit summary for each manual late-charge application |
+| `additional_cost_items` | Per-student, per-schedule charge amounts |
 
 Important storage:
 
@@ -692,6 +703,7 @@ Rejected slips are removed from storage and the request row is deleted. Rejected
 | `GET/PATCH/DELETE /api/schedules/[id]` | Single schedule API |
 | `GET /api/schedules/[id]/status` | Schedule payment status |
 | `POST /api/schedules/[id]/reminders/line` | Push LINE reminders |
+| `GET/POST /api/additional-costs` | Read history or apply a manual percentage late charge |
 | `GET/POST /api/transactions` | Transactions API |
 | `GET/PATCH/DELETE /api/transactions/[id]` | Single transaction API |
 | `GET /api/transactions/balance` | Balance summary |

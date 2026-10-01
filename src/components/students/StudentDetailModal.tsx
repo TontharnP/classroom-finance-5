@@ -18,6 +18,7 @@ import {
   updateStudent as updateStudentRemote,
 } from "@/lib/supabase/students";
 import { dbStudentToStudent } from "@/lib/supabase/adapter";
+import { getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 type StudentDetailModalProps = {
   isOpen: boolean;
@@ -122,21 +123,23 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
   // Get all schedules that include this student
   const orderedSchedules = getSchedulesInSystemOrder(data);
   const studentSchedules = orderedSchedules.filter((sch) => sch.studentIds.includes(student.id));
+  const targetForSchedule = (schedule: (typeof studentSchedules)[number]) =>
+    getStudentScheduleTarget(data, schedule, student.id);
 
   // Unpaid = schedules where paid amount < required
   const unpaidSchedules = studentSchedules.filter(
-    (sch) => (perSchedulePaid[sch.id] || 0) < sch.amountPerItem
+    (sch) => (perSchedulePaid[sch.id] || 0) < targetForSchedule(sch)
   );
 
   // Sum of remaining for unpaid schedules
   const totalUnpaid = unpaidSchedules.reduce(
-    (sum, sch) => sum + Math.max(0, sch.amountPerItem - (perSchedulePaid[sch.id] || 0)),
+    (sum, sch) => sum + Math.max(0, targetForSchedule(sch) - (perSchedulePaid[sch.id] || 0)),
     0
   );
 
   // Display total paid as capped at schedule amount to avoid overcounting
   const totalPaid = studentSchedules.reduce(
-    (sum, sch) => sum + Math.min(sch.amountPerItem, perSchedulePaid[sch.id] || 0),
+    (sum, sch) => sum + Math.min(targetForSchedule(sch), perSchedulePaid[sch.id] || 0),
     0
   );
 
@@ -161,7 +164,7 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
     id: sch.id,
     name: sch.name,
     folderPath: getFolderPath(sch.folderId, data.scheduleFolders),
-    amount: Math.max(0, sch.amountPerItem - (perSchedulePaid[sch.id] || 0)),
+    amount: Math.max(0, targetForSchedule(sch) - (perSchedulePaid[sch.id] || 0)),
     dueDate: sch.endDate || null,
   }));
 

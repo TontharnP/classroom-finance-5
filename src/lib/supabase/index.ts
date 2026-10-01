@@ -4,3 +4,4 @@ export * from "./schedules";
 export * from "./scheduleFolders";
 export * from "./transactions";
 export * from "./categories";
+export * from "./additionalCosts";

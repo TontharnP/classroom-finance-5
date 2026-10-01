@@ -8,6 +8,7 @@ import { EditTransactionModal } from "./EditTransactionModal";
 import { deleteTransaction as deleteTransactionRemote } from "@/lib/supabase/transactions";
 import { TransactionSlipButton } from "./TransactionSlipButton";
 import toast from "react-hot-toast";
+import { getAdditionalCostAmount, getStudentScheduleTarget } from "@/lib/additionalCosts";
 
 interface Props {
   isOpen: boolean;
@@ -30,6 +31,14 @@ export function TransactionDetailModal({ isOpen, onClose, transaction }: Props) 
     if (transaction.source !== "schedule" || !transaction.studentId) return null;
     return data.students.find((st) => st.id === transaction.studentId) || null;
   }, [transaction.source, transaction.studentId, data.students]);
+  const scheduleTarget = schedule
+    ? student
+      ? getStudentScheduleTarget(data, schedule, student.id)
+      : schedule.amountPerItem
+    : 0;
+  const additionalCost = schedule && student
+    ? getAdditionalCostAmount(data.additionalCostItems, schedule.id, student.id)
+    : 0;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="รายละเอียดรายการ" size="md">
@@ -95,10 +104,16 @@ export function TransactionDetailModal({ isOpen, onClose, transaction }: Props) 
             )}
             <div className="flex justify-between">
               <span className="text-zinc-600 dark:text-zinc-400">จำนวนที่ต้องชำระ</span>
-              <span className="font-medium">{schedule.amountPerItem.toLocaleString()} ฿</span>
+              <span className="font-medium">{scheduleTarget.toLocaleString()} ฿</span>
             </div>
+            {additionalCost > 0 && (
+              <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                <span>ค่าใช้จ่ายเพิ่มเติม</span>
+                <span className="font-medium">+{additionalCost.toLocaleString()} ฿</span>
+              </div>
+            )}
             {student && (
-              <StudentRemainingIndicator scheduleId={schedule.id} studentId={student.id} target={schedule.amountPerItem} />
+              <StudentRemainingIndicator scheduleId={schedule.id} studentId={student.id} target={scheduleTarget} />
             )}
           </div>
         )}

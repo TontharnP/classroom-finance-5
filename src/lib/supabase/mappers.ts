@@ -1,5 +1,5 @@
 import { toNumber, type Row } from "./server";
-import type { Student, Schedule, ScheduleFolder, Transaction, LinePaymentRequest } from "@/types/supabase";
+import type { Student, Schedule, ScheduleFolder, Transaction, LinePaymentRequest, AdditionalCostRun, AdditionalCostItem } from "@/types/supabase";
 import type { Category } from "@/types/supabase-category";
 
 function toIso(value: unknown): string {
@@ -50,6 +50,32 @@ export function mapScheduleFolder(row: Row): ScheduleFolder {
     is_hidden: Boolean(row.is_hidden ?? false),
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
+  };
+}
+
+export function mapAdditionalCostRun(row: Row): AdditionalCostRun {
+  return {
+    id: String(row.id),
+    request_key: String(row.request_key),
+    percentage: toNumber(row.percentage),
+    affected_student_count: Number(row.affected_student_count),
+    overdue_item_count: Number(row.overdue_item_count),
+    base_total: toNumber(row.base_total),
+    additional_total: toNumber(row.additional_total),
+    created_at: toIso(row.created_at),
+  };
+}
+
+export function mapAdditionalCostItem(row: Row): AdditionalCostItem {
+  return {
+    id: String(row.id),
+    run_id: String(row.run_id),
+    schedule_id: String(row.schedule_id),
+    student_id: String(row.student_id),
+    base_outstanding: toNumber(row.base_outstanding),
+    percentage: toNumber(row.percentage),
+    amount: toNumber(row.amount),
+    created_at: toIso(row.created_at),
   };
 }
 

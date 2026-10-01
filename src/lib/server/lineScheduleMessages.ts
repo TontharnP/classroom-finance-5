@@ -14,6 +14,7 @@ import {
   type LineFlexBox,
   type LineMessage,
 } from "@/lib/server/lineFlex";
+import { additionalCostKey, getAdditionalCostTotals } from "@/lib/server/additionalCosts";
 
 type ScheduleNoticeKind = "announcement" | "reminder";
 type NoticeStatus = "sent" | "missing_line_id" | "already_paid" | "failed";
@@ -56,9 +57,10 @@ export async function sendScheduleLineNotices({
   if (!scheduleRow) return null;
 
   const schedule = mapSchedule(scheduleRow);
-  const [studentRows, transactionRows] = await Promise.all([
+  const [studentRows, transactionRows, additionalCosts] = await Promise.all([
     listRecords<Row>("students"),
     listRecords<Row>("transactions"),
+    getAdditionalCostTotals(),
   ]);
   const students = studentRows.map(mapStudent);
   const transactions = transactionRows.map(mapTransaction);
@@ -77,7 +79,8 @@ export async function sendScheduleLineNotices({
   const recipients: ScheduleLineNoticeRecipient[] = [];
   for (const student of targetStudents) {
     const paid = paidByStudent.get(student.id) || 0;
-    const remaining = Math.max(0, Math.round((schedule.amount_per_item - paid) * 100) / 100);
+    const target = schedule.amount_per_item + (additionalCosts.get(additionalCostKey(schedule.id, student.id)) || 0);
+    const remaining = Math.max(0, Math.round((target - paid) * 100) / 100);
     const studentName = `${student.prefix} ${student.first_name} ${student.last_name}`.trim();
 
     if (kind === "reminder" && remaining <= 0) {

@@ -1,9 +1,9 @@
 "use client";
 import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { getStudents, getSchedules, getScheduleFolders, getTransactions } from "@/lib/supabase";
+import { getStudents, getSchedules, getScheduleFolders, getTransactions, getAdditionalCosts } from "@/lib/supabase";
 import { getCategories } from "@/lib/supabase/categories";
-import { dbStudentToStudent, dbScheduleToSchedule, dbScheduleFolderToScheduleFolder, dbTransactionToTransaction, dbCategoryToCategory } from "@/lib/supabase/adapter";
+import { dbStudentToStudent, dbScheduleToSchedule, dbScheduleFolderToScheduleFolder, dbTransactionToTransaction, dbCategoryToCategory, dbAdditionalCostRunToAdditionalCostRun, dbAdditionalCostItemToAdditionalCostItem } from "@/lib/supabase/adapter";
 
 export function DataHydrator() {
   const isHydrated = useAppStore((s) => s.isHydrated);
@@ -16,12 +16,13 @@ export function DataHydrator() {
     async function hydrate() {
       if (isHydrated) return;
       try {
-        const [dbStudents, dbSchedules, dbScheduleFolders, dbTransactions, dbCategories] = await Promise.all([
+        const [dbStudents, dbSchedules, dbScheduleFolders, dbTransactions, dbCategories, additionalCosts] = await Promise.all([
           getStudents(),
           getSchedules(),
           getScheduleFolders(),
           getTransactions(),
           getCategories(),
+          getAdditionalCosts(),
         ]);
         if (cancelled) return;
         setData({
@@ -36,6 +37,8 @@ export function DataHydrator() {
             { id: "pocket-cash", name: "Cash", color: "blue", isDefault: false },
             { id: "pocket-truemoney", name: "TrueMoney", color: "amber", isDefault: false },
           ],
+          additionalCostRuns: additionalCosts.runs.map(dbAdditionalCostRunToAdditionalCostRun),
+          additionalCostItems: additionalCosts.items.map(dbAdditionalCostItemToAdditionalCostItem),
         });
       } catch (e) {
         console.error("Hydration from Supabase failed", e);
@@ -48,6 +51,6 @@ export function DataHydrator() {
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, setData, markHydrated]);
+  }, [isHydrated, setData, markHydrated, setHydrationError]);
   return null;
 }
