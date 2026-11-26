@@ -291,7 +291,12 @@ Apply migrations in numeric order from `supabase/migrations`.
 010_add_slip_transaction_id.sql
 011_add_line_payment_slip_archives.sql
 012_add_additional_costs.sql
+013_add_query_performance_indexes.sql
+014_manage_additional_costs.sql
+015_grouped_schedule_payments.sql
 ```
+
+Apply migrations 014 and 015 before deploying the updated app. The existing LINE rich menu opens the updated payment flow.
 
 Important tables:
 
@@ -300,11 +305,12 @@ Important tables:
 | `students` | Student records and `line_user_id` |
 | `schedules` | Collection schedules |
 | `transactions` | Final money movement records |
-| `line_payment_requests` | Temporary LINE payment workflow state |
+| `line_payment_requests` | Temporary LINE payment requests and the amount allocated to each schedule |
+| `line_payment_carts` | Student selections across pages in the LINE payment menu |
 | `line_payment_slip_archives` | Approved-slip metadata after request deletion |
 | `categories` | Transaction categories |
 | `schedule_folders` | Schedule grouping |
-| `additional_cost_runs` | Audit summary for each manual late-charge application |
+| `additional_cost_runs` | Editable summary for each manual late-charge round |
 | `additional_cost_items` | Per-student, per-schedule charge amounts |
 
 Important storage:
@@ -370,12 +376,10 @@ The webhook reads `event.source.userId` and stores it in `students.line_user_id`
 
 The student taps the rich menu pay action or sends a pay command. The bot:
 
-1. Checks that the student is registered.
-2. Loads unpaid schedules for that student.
-3. Sends a LINE Flex message with large tappable buttons.
-4. Creates a `line_payment_requests` row with `status = selecting`.
-5. Stores the selected amount.
-6. Lets the student select a payment method.
+1. Checks registration and loads the student's unpaid schedules.
+2. Shows the selected schedules and updates the total each time the student selects or deselects an item.
+3. Offers a full or partial payment when one schedule is selected. For multiple schedules, uses the full outstanding balance of each selected schedule.
+4. Creates a payment request and lets the student choose a method. Transfer and TrueMoney use one QR and one slip for the combined amount.
 
 Supported methods:
 
@@ -423,6 +427,12 @@ Already submitted slip reviews are not cancelled by the student:
 pending_slip_review
 ```
 
+## Web Treasurer Workflow
+
+On **ค่าใช้จ่ายเพิ่มเติม**, enter a percentage to preview overdue charges and confirm a new round. Use **แก้ไข** to recalculate a round from its saved per-student, per-schedule balances, or **ลบ** to remove the round. A reduction requires the new target to cover recorded payments and payments already in progress through LINE.
+
+To record a combined payment on the web, open **นักเรียน**, select a student, and choose **รายการค้างชำระ → ชำระหลายรายการ**. Select at least two schedules, review the total, and choose the payment method. Use **ยืนยันรับชำระ** after receiving payment. K PLUS displays a QR for the combined amount.
+
 ## Payment Request Lifecycle
 
 `line_payment_requests.status` can include:
@@ -446,11 +456,11 @@ Current runtime behavior:
 | Choose transfer or TrueMoney | Update to `awaiting_slip` |
 | Choose cash | Update to `cash_pending` |
 | Upload slip | Store image and update slip metadata |
-| Duplicate or invalid auto-check | Reject, delete slip image, delete request |
-| Any other auto-check | Keep request as `pending_slip_review` for manual review |
-| Web approve | Create transaction, archive metadata, delete request |
+| Slip photo without a readable QR | Reject and delete the request and image |
+| Slip photo with a readable QR | Queue for manual review, including slips flagged as possible duplicates |
+| Web approve | Record each schedule payment, archive one slip, and delete the request in one database transaction |
 | Web reject | Push rejection, delete slip image, delete request |
-| Student cancel before review | Delete request |
+| Student cancel before review | Clear the selection and delete cancellable requests |
 
 ## Slip Checking Design
 
@@ -545,6 +555,7 @@ id
 line_user_id
 student_id
 schedule_id
+allocations
 method
 amount
 status
@@ -572,17 +583,17 @@ This table is intentionally temporary for payment requests. Approved and rejecte
 
 This is the source of truth for completed money movement.
 
-On approval, the app creates:
+On approval, the app creates one transaction for each paid schedule.
 
 ```txt
 kind = income
 source = schedule
-amount = line payment amount
+amount = allocated amount for the schedule
 method = kplus | truemoney | cash
 schedule_id = selected schedule
 student_id = paying student
 pocket_id = pocket-{method}
-description = LINE payment proof URL when available
+description = LINE payment summary or individual payment proof URL
 ```
 
 ### `line_payment_slip_archives`
@@ -631,15 +642,9 @@ Approval is handled in:
 src/lib/server/linePaymentReview.ts
 ```
 
-Flow:
-
-1. Lock the request by updating only reviewable statuses.
-2. Mark the request approved internally.
-3. Create a transaction.
-4. Archive approved slip metadata.
-5. Enforce approved slip image retention.
-6. Delete the `line_payment_requests` row.
-7. Notify the student when approval came from web review.
+1. Lock the request and verify that the payment can still be applied to the outstanding balances.
+2. Insert all schedule transactions, archive the slip when present, and delete the request in one database transaction.
+3. Enforce slip image retention and notify the student.
 
 ### Rejection Flow
 
@@ -704,6 +709,8 @@ Rejected slips are removed from storage and the request row is deleted. Rejected
 | `GET /api/schedules/[id]/status` | Schedule payment status |
 | `POST /api/schedules/[id]/reminders/line` | Push LINE reminders |
 | `GET/POST /api/additional-costs` | Read history or apply a manual percentage late charge |
+| `PATCH/DELETE /api/additional-costs/[id]` | Recalculate or remove a late-charge round |
+| `GET/POST /api/transactions/grouped-schedule-payment` | Read current student balances or record a combined payment |
 | `GET/POST /api/transactions` | Transactions API |
 | `GET/PATCH/DELETE /api/transactions/[id]` | Single transaction API |
 | `GET /api/transactions/balance` | Balance summary |
@@ -850,7 +857,7 @@ Check:
 
 ### Approval creates duplicate payment
 
-Approval uses a status lock against reviewable statuses:
+Approval locks the request and accepts these reviewable statuses:
 
 ```txt
 pending_slip_review

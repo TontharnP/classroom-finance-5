@@ -1,4 +1,4 @@
-import { ok, serverError } from "@/lib/api/response";
+import { badRequest, ok, serverError } from "@/lib/api/response";
 import { getSupabaseAdmin, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest } from "@/lib/supabase/mappers";
 
@@ -8,7 +8,13 @@ export async function GET(request: Request) {
     const scheduleId = url.searchParams.get("scheduleId");
     const status = url.searchParams.get("status");
     let query = getSupabaseAdmin().from("line_payment_requests").select("*");
-    if (scheduleId) query = query.eq("schedule_id", scheduleId);
+    if (scheduleId) {
+      if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scheduleId)) {
+        return badRequest("รหัสกำหนดการไม่ถูกต้อง");
+      }
+      const allocationFilter = JSON.stringify([{ schedule_id: scheduleId }]);
+      query = query.or(`schedule_id.eq.${scheduleId},allocations.cs.${allocationFilter}`);
+    }
     if (status) {
       const statuses = status.split(",").map((item) => item.trim()).filter(Boolean);
       if (statuses.length > 0) query = query.in("status", statuses);

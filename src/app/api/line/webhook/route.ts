@@ -1,7 +1,7 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import generatePayload from "promptpay-qr";
 import { badRequest, ok, serverError } from "@/lib/api/response";
-import { createRecord, deleteRecord, listRecords, updateRecord, type Row } from "@/lib/supabase/server";
+import { createRecord, deleteRecord, getSupabaseAdmin, listRecords, updateRecord, type Row } from "@/lib/supabase/server";
 import { mapLinePaymentRequest, mapSchedule, mapStudent, mapTransaction } from "@/lib/supabase/mappers";
 import { analyzeSlipImage } from "@/lib/server/slipCheck";
 import { deleteSlipImages, storeSlipImage } from "@/lib/server/slipStorage";
@@ -22,6 +22,7 @@ import {
   paymentDebtButton,
   type LineFlexBox,
 } from "@/lib/server/lineFlex";
+import { roundMoney } from "@/lib/additionalCosts";
 import { additionalCostKey, getAdditionalCostTotals } from "@/lib/server/additionalCosts";
 
 const PROMPTPAY_ID = "004666006046829";
@@ -73,6 +74,11 @@ type LineWebhookEvent = {
 };
 
 const studentColumns = ["line_user_id"];
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+const PAY_MENU_PAGE_SIZE = 6;
+
+type PaymentCart = { line_user_id: string; student_id: string; revision: string; schedule_ids: string[] };
+type Debt = Awaited<ReturnType<typeof getUnpaidSchedulesForStudent>>[number];
 
 export async function GET() {
   return ok({
@@ -146,7 +152,7 @@ async function handleLineEvent(event: LineWebhookEvent) {
   if (/^\d+(?:\.\d{1,2})?$/.test(text) && event.source?.userId) {
     const activeRequest = (await listRecords<Row>("line_payment_requests"))
       .map(mapLinePaymentRequest)
-      .filter((r) => r.line_user_id === event.source?.userId && r.status === "selecting")
+      .filter((r) => r.line_user_id === event.source?.userId && r.status === "selecting" && !r.allocations)
       .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
     if (activeRequest) {
       await handleAmountSelection(event, activeRequest.id, parseFloat(text));
@@ -186,6 +192,11 @@ async function handleAction(event: LineWebhookEvent, action: string) {
         "",
         "เสร็จปุ๊บ กดเมนู ชำระเงิน ต่อได้เลยครับ 🚀",
       ].join("\n"));
+      return;
+    }
+    if (normalized.startsWith("pay:cart:")) {
+      const [, , operation, page, revision, value] = normalized.split(":");
+      await showPayMenu(event, operation, Number(page), revision, value);
       return;
     }
     if (normalized.startsWith("pay:schedule:")) {
@@ -259,29 +270,91 @@ async function handleAction(event: LineWebhookEvent, action: string) {
   ].join("\n"));
 }
 
-async function showPayMenu(event: LineWebhookEvent) {
-  const student = await getStudentByLineUserId(event.source?.userId);
+async function showPayMenu(
+  event: LineWebhookEvent,
+  operation = "page",
+  page = 0,
+  revision?: string,
+  value?: string
+) {
+  const lineUserId = event.source?.userId;
+  if (!lineUserId) return;
+  const student = await getStudentByLineUserId(lineUserId);
   if (!student) {
     await replyRegisterPrompt(event);
     return;
   }
 
+  const db = getSupabaseAdmin();
   const debts = await getUnpaidSchedulesForStudent(student.id);
-  if (debts.length === 0) {
-    await replyLineMessages(event.replyToken, [
-      createFlexMessage("ตอนนี้ไม่มีรายการค้างชำระ", createPayMenuBubble(student, debts)),
-    ]);
-    return;
+  let cart: PaymentCart | null = null;
+  if (debts.length > 0) {
+    const result = await db.from("line_payment_carts").select("*").eq("line_user_id", lineUserId).maybeSingle();
+    if (result.error) throw result.error;
+    cart = result.data as PaymentCart | null;
+    if (!cart || cart.student_id !== student.id) {
+      const created = await db.from("line_payment_carts").upsert({
+        line_user_id: lineUserId, student_id: student.id, revision: randomUUID(), schedule_ids: [],
+      }).select("*").single();
+      if (created.error) throw created.error;
+      cart = created.data as PaymentCart;
+    }
   }
 
-  const message = createFlexMessage(
-    `มีรายการค้างชำระ ${debts.length} รายการ`,
-    createPayMenuBubble(student, debts)
-  );
+  if (cart) {
+    const unpaidIds = new Set(debts.map((debt) => debt.schedule.id));
+    let nextIds = cart.schedule_ids.filter((id) => unpaidIds.has(id));
+    const toggle = operation === "toggle" && cart.revision === revision && value && unpaidIds.has(value);
+    if (toggle) {
+      nextIds = nextIds.includes(value) ? nextIds.filter((id) => id !== value) : [...nextIds, value];
+    }
+
+    if (toggle || nextIds.length !== cart.schedule_ids.length) {
+      const result = await db.from("line_payment_carts").update({ schedule_ids: nextIds, revision: randomUUID() })
+        .eq("line_user_id", lineUserId).eq("revision", cart.revision).select("*").maybeSingle();
+      if (result.error) throw result.error;
+      if (!result.data) return showPayMenu(event, "page", page);
+      cart = result.data as PaymentCart;
+    }
+  }
+
+  let notice: string | undefined;
+  const selected = debts.filter((debt) => cart?.schedule_ids.includes(debt.schedule.id));
+  if (operation === "checkout") {
+    if (cart && revision === cart.revision && selected.length === cart.schedule_ids.length && value === cartFingerprint(selected)) {
+      if (selected.length === 1) {
+        await handleScheduleSelection(event, selected[0].schedule.id);
+        return;
+      }
+      if (selected.length > 1) {
+        const allocations = selected.map((debt) => ({ schedule_id: debt.schedule.id, amount: debt.remaining }));
+        const { data, error } = await db.rpc("checkout_line_payment_cart", {
+          p_line_user_id: lineUserId, p_student_id: student.id, p_revision: cart.revision, p_allocations: allocations,
+        });
+        if (error) throw error;
+        if (data?.id) {
+          const request = mapLinePaymentRequest(data);
+          await replyLineMessages(event.replyToken, [
+            createFlexMessage("เลือกวิธีชำระยอดรวม", createPaymentMethodBubble(
+              request.id, `ชำระรวม ${selected.length} รายการ`, request.amount, selected
+            )),
+          ]);
+          return;
+        }
+      }
+    }
+    notice = "รายการหรือยอดค้างเปลี่ยนแล้ว กรุณาตรวจสอบและเลือกอีกครั้ง";
+  }
 
   await replyLineMessages(event.replyToken, [
-    message,
+    createFlexMessage("เลือกรายการชำระเงิน", createPayMenuBubble(student, debts, selected, cart?.revision, page, notice)),
   ]);
+}
+
+function cartFingerprint(debts: Debt[]) {
+  return createHash("sha256")
+    .update(JSON.stringify(debts.map((debt) => [debt.schedule.id, debt.remaining]).sort()))
+    .digest("hex").slice(0, 32);
 }
 
 async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: string) {
@@ -303,18 +376,14 @@ async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: stri
     return;
   }
 
-  const existingRequests = (await listRecords<Row>("line_payment_requests"))
-    .map(mapLinePaymentRequest)
-    .filter((request) =>
-      request.line_user_id === event.source?.userId &&
-      request.student_id === student.id &&
-      request.schedule_id === scheduleId &&
-      ["selecting", "awaiting_slip", "pending_slip_review", "pending_review"].includes(request.status)
-    );
-
-  await Promise.all(existingRequests.map((request) =>
-    updateRecord<Row>("line_payment_requests", request.id, { status: "expired", note: "Replaced by newer LINE payment request" }, ["status", "note"])
-  ));
+  const { error: expireError } = await getSupabaseAdmin().from("line_payment_requests")
+    .update({ status: "expired" })
+    .eq("line_user_id", student.line_user_id)
+    .eq("student_id", student.id)
+    .eq("schedule_id", scheduleId)
+    .eq("status", "selecting")
+    .is("allocations", null);
+  if (expireError) throw expireError;
 
   const request = await createRecord<Row>("line_payment_requests", {
     line_user_id: event.source?.userId,
@@ -333,8 +402,11 @@ async function handleScheduleSelection(event: LineWebhookEvent, scheduleId: stri
 }
 
 async function handleAmountSelection(event: LineWebhookEvent, requestId: string, amount: number) {
-  const requests = await listRecords<Row>("line_payment_requests");
-  const row = requests.find((r) => r.id === requestId);
+  if (!UUID_PATTERN.test(requestId)) return;
+  const db = getSupabaseAdmin();
+  const result = await db.from("line_payment_requests").select("*").eq("id", requestId).maybeSingle();
+  if (result.error) throw result.error;
+  const row = result.data;
   if (!row) {
     await replyLineText(event.replyToken, [
       "หารายการนี้ไม่เจอเลยครับ 😅 อาจจะหมดอายุหรือถูกยกเลิกไปแล้ว",
@@ -348,7 +420,7 @@ async function handleAmountSelection(event: LineWebhookEvent, requestId: string,
     await replyLineText(event.replyToken, "รายการนี้ไม่ใช่ของบัญชี LINE นี้นะครับ 🔐");
     return;
   }
-  if (request.status !== "selecting") {
+  if (request.status !== "selecting" || request.allocations) {
     await replyLineText(event.replyToken, [
       "รายการนี้เลือกจำนวนเงินไปแล้วนะครับ",
       "ถ้าจะเริ่มใหม่ พิมพ์ ชำระเงิน ได้เลย",
@@ -368,7 +440,13 @@ async function handleAmountSelection(event: LineWebhookEvent, requestId: string,
   }
 
   const roundedAmount = Math.round(amount * 100) / 100;
-  await updateRecord<Row>("line_payment_requests", request.id, { amount: roundedAmount }, ["amount"]);
+  const updated = await db.from("line_payment_requests").update({ amount: roundedAmount })
+    .eq("id", request.id).eq("status", "selecting").is("allocations", null).select("id").maybeSingle();
+  if (updated.error) throw updated.error;
+  if (!updated.data) {
+    await replyLineText(event.replyToken, "รายการนี้เปลี่ยนสถานะแล้ว กรุณาเปิดเมนูชำระเงินอีกครั้ง");
+    return;
+  }
 
   // Look up schedule name
   const schedules = (await listRecords<Row>("schedules")).map(mapSchedule);
@@ -385,37 +463,54 @@ async function handleAmountSelection(event: LineWebhookEvent, requestId: string,
 
 function createPayMenuBubble(
   student: ReturnType<typeof mapStudent>,
-  debts: Awaited<ReturnType<typeof getUnpaidSchedulesForStudent>>
+  debts: Debt[],
+  selected: Debt[],
+  revision: string | undefined,
+  requestedPage: number,
+  notice?: string
 ) {
-  const totalDebt = debts.reduce((sum, debt) => sum + debt.remaining, 0);
-  const bodyContents: LineFlexBox[] = [
+  const pageCount = Math.ceil(debts.length / PAY_MENU_PAGE_SIZE);
+  const page = Math.max(0, Math.min(pageCount - 1, Number.isSafeInteger(requestedPage) ? requestedPage : 0));
+  const selectedIds = new Set(selected.map((debt) => debt.schedule.id));
+  const body: LineFlexBox[] = [
     flexHero("ชำระเงิน", `${student.prefix} ${student.first_name} ${student.last_name}`, "pay"),
-    flexText(`เลขที่ ${student.number}${student.nick_name ? ` (${student.nick_name})` : ""}`, "#6B7280", "sm"),
     metricGrid([
-      metricBox("ยอดค้างรวม", formatBaht(totalDebt), "#DC2626", "#FEF2F2"),
-      metricBox("รายการค้าง", `${debts.length} รายการ`, "#2563EB", "#EFF6FF"),
+      metricBox("ยอดค้างทั้งหมด", formatBaht(roundMoney(debts.reduce((sum, debt) => sum + debt.remaining, 0))), "#DC2626", "#FEF2F2"),
+      metricBox(`เลือก ${selected.length} รายการ`, formatBaht(roundMoney(selected.reduce((sum, debt) => sum + debt.remaining, 0))), "#2563EB", "#EFF6FF"),
     ]),
   ];
 
-  if (debts.length === 0) {
-    bodyContents.push(emptyStateBox("ตอนนี้ไม่มีรายการค้างชำระครับ ✅", "กระเป๋าสตางค์รอดแล้ววันนี้"));
-  } else {
-    bodyContents.push(flexSectionTitle("แตะเลือกรายการที่ต้องการจ่าย"));
-    bodyContents.push(...debts.slice(0, 8).map((debt) =>
-      paymentDebtButton(
-        debt.schedule.name,
-        debt.remaining,
-        debt.schedule.end_date || debt.schedule.start_date,
-        `pay:schedule:${debt.schedule.id}`
-      )
-    ));
-    if (debts.length > 8) {
-      bodyContents.push(flexText(`และอีก ${debts.length - 8} รายการ`, "#6B7280", "xs"));
-    }
-    bodyContents.push(flexButton("ยกเลิก", { type: "message", label: "ยกเลิก", text: "ยกเลิก" }, "secondary", "#6B7280"));
+  if (notice) body.push(flexText(notice, "#92400E", "sm"));
+  if (debts.length === 0 || !revision) {
+    body.push(emptyStateBox("ไม่มีรายการค้างชำระ", "ชำระครบแล้ว"));
+    return flexBubble(body);
   }
 
-  return flexBubble(bodyContents);
+  body.push(flexSectionTitle("แตะเพื่อเลือกหรือยกเลิกการเลือก"));
+  for (const debt of debts.slice(page * PAY_MENU_PAGE_SIZE, (page + 1) * PAY_MENU_PAGE_SIZE)) {
+    body.push(paymentDebtButton(
+      debt.schedule.name, debt.remaining, debt.schedule.end_date || debt.schedule.start_date,
+      `pay:cart:toggle:${page}:${revision}:${debt.schedule.id}`, selectedIds.has(debt.schedule.id)
+    ));
+  }
+
+  if (pageCount > 1) {
+    body.push(flexText(`หน้า ${page + 1} / ${pageCount}`, "#6B7280", "xs"));
+    const navigation: LineFlexBox[] = [];
+    if (page > 0) navigation.push(flexButton("ก่อนหน้า", { type: "postback", data: `pay:cart:page:${page - 1}` }, "secondary", "#2563EB"));
+    if (page + 1 < pageCount) navigation.push(flexButton("ถัดไป", { type: "postback", data: `pay:cart:page:${page + 1}` }, "secondary", "#2563EB"));
+    body.push(metricGrid(navigation));
+  }
+
+  if (selected.length > 0) {
+    body.push(flexButton(
+      selected.length === 1 ? "ชำระรายการที่เลือก" : `ชำระรวม ${selected.length} รายการ`,
+      { type: "postback", data: `pay:cart:checkout:${page}:${revision}:${cartFingerprint(selected)}` },
+      "primary", "#2563EB"
+    ));
+  }
+  body.push(flexButton("ยกเลิก", { type: "message", text: "ยกเลิก" }, "secondary", "#6B7280"));
+  return flexBubble(body);
 }
 
 function createAmountSelectionBubble(requestId: string, scheduleName: string, remaining: number) {
@@ -438,10 +533,14 @@ function createAmountSelectionBubble(requestId: string, scheduleName: string, re
   return flexBubble(bodyContents);
 }
 
-function createPaymentMethodBubble(requestId: string, scheduleName: string, amount: number) {
+function createPaymentMethodBubble(requestId: string, scheduleName: string, amount: number, selected?: Debt[]) {
   return flexBubble([
     flexHero("เลือกวิธีชำระเงิน", scheduleName, "pay"),
-    metricBox("ยอดค้าง", formatBaht(amount), "#2563EB", "#EFF6FF", "xxl"),
+    metricBox("ยอดชำระ", formatBaht(amount), "#2563EB", "#EFF6FF", "xxl"),
+    ...(selected ? [
+      ...selected.slice(0, 8).map((debt) => flexText(`${debt.schedule.name} • ${formatBaht(debt.remaining)}`, "#374151", "sm")),
+      ...(selected.length > 8 ? [flexText(`และอีก ${selected.length - 8} รายการ`, "#6B7280", "xs")] : []),
+    ] : []),
     flexText("แตะเลือกช่องทางชำระเงินจากปุ่มใหญ่ด้านล่างได้เลยครับ", "#374151", "sm"),
     flexText("ถ้าเลือกโอนหรือวอลเล็ต ระบบจะส่ง QR พร้อมยอดเงินคงที่ให้สแกน", "#6B7280", "xs"),
     flexButton("K PLUS / โอนธนาคาร", { type: "postback", label: "K PLUS", data: `pay:method:${requestId}:kplus`, displayText: "เลือก K PLUS" }, "primary", "#059669"),
@@ -460,31 +559,28 @@ async function handleMethodSelection(event: LineWebhookEvent, requestId: string,
     return;
   }
 
-  const requests = await listRecords<Row>("line_payment_requests");
-  const row = requests.find((request) => request.id === requestId);
-  if (!row) {
-    await replyLineText(event.replyToken, [
-      "หารายการนี้ไม่เจอเลยครับ 😅 อาจจะหมดอายุหรือถูกยกเลิกไปแล้ว",
-      "ลองพิมพ์ ชำระเงิน เริ่มใหม่อีกทีนะครับ",
-    ].join("\n"));
+  if (!UUID_PATTERN.test(requestId) || !event.source?.userId) return;
+  const { data, error } = await getSupabaseAdmin().rpc("select_line_payment_method", {
+    p_request_id: requestId, p_line_user_id: event.source.userId, p_method: method,
+  });
+  if (error?.code === "P0001") {
+    await replyLineText(event.replyToken, error.message);
+    return;
+  }
+  if (error) throw error;
+  if (!data?.id) {
+    await replyLineText(event.replyToken, "รายการนี้ถูกยกเลิกหรือเลือกวิธีชำระไปแล้ว กรุณาเปิดเมนูชำระเงินอีกครั้ง");
     return;
   }
 
-  const request = mapLinePaymentRequest(row);
-  if (request.line_user_id !== event.source?.userId) {
-    await replyLineText(event.replyToken, "รายการนี้ไม่ใช่ของบัญชี LINE นี้ครับ เพื่อความปลอดภัยเลยไปต่อให้ไม่ได้นะครับ 🔐");
-    return;
-  }
-
+  const request = mapLinePaymentRequest(data);
   if (method === "cash") {
-    await updateRecord<Row>("line_payment_requests", request.id, { method, status: "cash_pending" }, ["method", "status"]);
     await replyLineMessages(event.replyToken, [
       createFlexMessage("รับเรื่องชำระเงินสดไว้แล้ว", createCashPaymentBubble(request.amount)),
     ]);
     return;
   }
 
-  await updateRecord<Row>("line_payment_requests", request.id, { method, status: "awaiting_slip" }, ["method", "status"]);
   const payload = method === "truemoney"
     ? generateTrueMoneyPayload(request.amount)
     : generatePayload(PROMPTPAY_ID, { amount: request.amount });
@@ -519,10 +615,17 @@ function createQrPaymentBubble(method: string, amount: number) {
 }
 
 async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
-  const activeRequest = (await listRecords<Row>("line_payment_requests"))
-    .map(mapLinePaymentRequest)
-    .filter((request) => request.line_user_id === event.source?.userId && request.status === "awaiting_slip")
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const student = await getStudentByLineUserId(event.source?.userId);
+  if (!student) {
+    await replyRegisterPrompt(event);
+    return;
+  }
+  const db = getSupabaseAdmin();
+  const result = await db.from("line_payment_requests").select("*")
+    .eq("line_user_id", student.line_user_id).eq("student_id", student.id).eq("status", "awaiting_slip")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (result.error) throw result.error;
+  const activeRequest = result.data ? mapLinePaymentRequest(result.data) : null;
 
   if (!activeRequest) {
     await replyLineText(event.replyToken, [
@@ -608,38 +711,28 @@ async function handleSlipImage(event: LineWebhookEvent, messageId: string) {
     data: imageBuffer,
   });
 
-  await updateRecord<Row>(
-    "line_payment_requests",
-    activeRequest.id,
-    {
-      status: shouldAutoRejectSlip ? "rejected" : "pending_slip_review",
-      slip_status: slipStatus,
-      slip_url: proof.url,
-      slip_pathname: proof.pathname,
-      slip_qr_payload: slipCheck.qrPayload ?? null,
-      slip_image_hash: slipCheck.imageHash,
-      slip_transaction_id: slipCheck.slipTransactionId ?? null,
-      slip_ocr_text: slipCheck.ocrText ?? null,
-      slip_auto_check_result: autoCheckResult,
-      reject_reason: shouldAutoRejectSlip ? autoRejectReason : null,
-      reviewed_by: null,
-      reviewed_at: null,
-    },
-    [
-      "status",
-      "slip_status",
-      "slip_url",
-      "slip_pathname",
-      "slip_qr_payload",
-      "slip_image_hash",
-      "slip_transaction_id",
-      "slip_ocr_text",
-      "slip_auto_check_result",
-      "reject_reason",
-      "reviewed_by",
-      "reviewed_at",
-    ]
-  );
+  const saved = await db.from("line_payment_requests").update({
+    status: shouldAutoRejectSlip ? "rejected" : "pending_slip_review",
+    slip_status: slipStatus,
+    slip_url: proof.url,
+    slip_pathname: proof.pathname,
+    slip_qr_payload: slipCheck.qrPayload ?? null,
+    slip_image_hash: slipCheck.imageHash,
+    slip_transaction_id: slipCheck.slipTransactionId ?? null,
+    slip_ocr_text: slipCheck.ocrText ?? null,
+    slip_auto_check_result: autoCheckResult,
+    reject_reason: shouldAutoRejectSlip ? autoRejectReason : null,
+    reviewed_by: null,
+    reviewed_at: null,
+  }).eq("id", activeRequest.id).eq("status", "awaiting_slip").select("id").maybeSingle();
+  if (saved.error) throw saved.error;
+  if (!saved.data) {
+    await deleteSlipImages([proof.pathname]).catch((error) => {
+      console.error("Failed to delete unused slip image", error);
+    });
+    await replyLineText(event.replyToken, "รายการนี้เปลี่ยนสถานะแล้ว กรุณาตรวจสอบสถานะการชำระเงิน");
+    return;
+  }
 
   if (shouldAutoRejectSlip) {
     await replyLineText(event.replyToken, [
@@ -679,20 +772,18 @@ async function cancelActivePayment(event: LineWebhookEvent) {
     return;
   }
 
-  const activeRequests = (await listRecords<Row>("line_payment_requests"))
-    .map(mapLinePaymentRequest)
-    .filter((request) =>
-      request.line_user_id === event.source?.userId &&
-      ["selecting", "awaiting_slip", "cash_pending"].includes(request.status)
-    );
+  const db = getSupabaseAdmin();
+  const cart = await db.from("line_payment_carts").delete()
+    .eq("line_user_id", student.line_user_id).select("line_user_id");
+  if (cart.error) throw cart.error;
+  const requests = await db.from("line_payment_requests").delete()
+    .eq("line_user_id", student.line_user_id).eq("student_id", student.id)
+    .in("status", ["selecting", "awaiting_slip", "cash_pending"]).select("id");
+  if (requests.error) throw requests.error;
 
-  if (activeRequests.length === 0) {
-    await replyLineText(event.replyToken, "ตอนนี้ไม่มีรายการชำระเงินค้างอยู่เลยครับ ไม่มีอะไรให้ยกเลิกน้า 👀");
-    return;
-  }
-
-  await Promise.all(activeRequests.map((request) => deleteRecord("line_payment_requests", request.id)));
-  await replyLineText(event.replyToken, "ยกเลิกให้แล้วนะครับ ✅ ไว้จ่ายรอบหน้าค่อยว่ากันใหม่");
+  await replyLineText(event.replyToken, requests.data.length || cart.data.length
+    ? "ยกเลิกรายการที่กำลังเลือกหรือรอชำระแล้วครับ"
+    : "ไม่มีรายการที่ยกเลิกได้ครับ");
 }
 
 async function showStudentStatus(event: LineWebhookEvent) {
@@ -941,32 +1032,28 @@ async function replyRegisterPrompt(event: LineWebhookEvent) {
 
 async function getStudentByLineUserId(lineUserId: string | undefined) {
   if (!lineUserId) return null;
-  const students = (await listRecords<Row>("students")).map(mapStudent);
-  return students.find((student) => student.line_user_id === lineUserId) || null;
+  const { data, error } = await getSupabaseAdmin().from("students").select("*")
+    .eq("line_user_id", lineUserId).maybeSingle();
+  if (error) throw error;
+  return data ? mapStudent(data) : null;
 }
 
 async function getUnpaidSchedulesForStudent(studentId: string) {
-  const [scheduleRows, transactionRows, additionalCosts] = await Promise.all([
-    listRecords<Row>("schedules"),
-    listRecords<Row>("transactions"),
-    getAdditionalCostTotals(),
+  const db = getSupabaseAdmin();
+  const [scheduleResult, balanceResult] = await Promise.all([
+    db.from("schedules").select("*").contains("student_ids", [studentId]),
+    db.rpc("student_schedule_balances", { p_student_id: studentId }),
   ]);
-  const schedules = scheduleRows.map(mapSchedule).filter((schedule) => schedule.student_ids.includes(studentId));
-  const transactions = transactionRows.map(mapTransaction);
+  if (scheduleResult.error) throw scheduleResult.error;
+  if (balanceResult.error) throw balanceResult.error;
+  const balances = new Map((balanceResult.data as Row[]).map((row) => [String(row.schedule_id), Number(row.remaining)]));
 
-  return schedules
-    .map((schedule) => {
-      const paid = transactions
-        .filter((transaction) => transaction.source === "schedule" && transaction.schedule_id === schedule.id && transaction.student_id === studentId)
-        .reduce((sum, transaction) => sum + transaction.amount, 0);
-      return {
-        schedule,
-        paid,
-        remaining: Math.max(0, Math.round((schedule.amount_per_item + (additionalCosts.get(additionalCostKey(schedule.id, studentId)) || 0) - paid) * 100) / 100),
-      };
-    })
-    .filter((item) => item.remaining > 0)
-    .sort((a, b) => String(a.schedule.end_date || a.schedule.start_date).localeCompare(String(b.schedule.end_date || b.schedule.start_date)));
+  return (scheduleResult.data as Row[])
+    .map(mapSchedule)
+    .map((schedule) => ({ schedule, remaining: balances.get(schedule.id) ?? 0 }))
+    .filter((debt) => debt.remaining > 0)
+    .sort((a, b) => String(a.schedule.end_date || a.schedule.start_date)
+      .localeCompare(String(b.schedule.end_date || b.schedule.start_date)) || a.schedule.id.localeCompare(b.schedule.id));
 }
 
 function buildAutoCheckResult({

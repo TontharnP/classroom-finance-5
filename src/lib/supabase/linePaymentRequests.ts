@@ -24,7 +24,7 @@ export async function updateLinePaymentRequest(
 
 export async function approveLinePaymentRequest(id: string): Promise<{
   request: LinePaymentRequest;
-  transaction: import("@/types/supabase").Transaction;
+  transactions: import("@/types/supabase").Transaction[];
 }> {
   return apiRequest(`/api/line/payment-requests/${id}/approve`, {
     method: "POST",

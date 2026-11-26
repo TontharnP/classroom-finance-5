@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 const DEFAULT_SLIP_BUCKET = "payment-slips";
@@ -22,14 +23,14 @@ export async function storeSlipImage({
   data: Buffer;
 }) {
   const extension = extensionFromContentType(contentType);
-  const pathname = `${requestId}-${Date.now()}${extension}`;
+  const pathname = `${requestId}-${randomUUID()}${extension}`;
   const bucket = getSlipBucketName();
   const { error } = await getSupabaseAdmin()
     .storage
     .from(bucket)
     .upload(pathname, data, {
       contentType: contentType || "image/jpeg",
-      upsert: true,
+      upsert: false,
     });
 
   if (error) throw error;

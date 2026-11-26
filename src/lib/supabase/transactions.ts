@@ -86,3 +86,22 @@ export async function getTransactionsByCategory(month?: string): Promise<
   return apiRequest(`/api/transactions?${params.toString()}`);
 }
 
+
+export function getGroupedScheduleBalances(studentId: string) {
+  return apiRequest<{ id: string; name: string; amount: number }[]>(
+    `/api/transactions/grouped-schedule-payment?studentId=${encodeURIComponent(studentId)}`
+  );
+}
+
+export function recordGroupedSchedulePayment(input: {
+  requestKey: string;
+  studentId: string;
+  method: "cash" | "kplus" | "truemoney";
+  pocketId?: string;
+  allocations: { schedule_id: string; amount: number }[];
+}) {
+  return apiRequest<Transaction[]>("/api/transactions/grouped-schedule-payment", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

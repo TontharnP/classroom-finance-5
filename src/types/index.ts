@@ -106,6 +106,7 @@ export interface LinePaymentRequest {
   lineUserId: string;
   studentId: string;
   scheduleId: string;
+  allocations?: { scheduleId: string; amount: number }[];
   method?: PaymentMethod;
   amount: number;
   status: LinePaymentRequestStatus;

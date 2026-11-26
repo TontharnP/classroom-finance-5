@@ -104,6 +104,7 @@ export type LinePaymentRequest = {
   line_user_id: string;
   student_id: string;
   schedule_id: string;
+  allocations?: { schedule_id: string; amount: number }[];
   method?: "kplus" | "cash" | "truemoney";
   amount: number;
   status: LinePaymentRequestStatus;

@@ -131,7 +131,7 @@ export function emptyStateBox(title: string, subtitle: string): LineFlexBox {
   };
 }
 
-export function paymentDebtButton(name: string, amount: number, dueDate: string | undefined, data: string): LineFlexBox {
+export function paymentDebtButton(name: string, amount: number, dueDate: string | undefined, data: string, selected?: boolean): LineFlexBox {
   return {
     type: "box",
     layout: "vertical",
@@ -139,13 +139,13 @@ export function paymentDebtButton(name: string, amount: number, dueDate: string 
     paddingAll: "14px",
     cornerRadius: "16px",
     borderWidth: "1px",
-    borderColor: "#BFDBFE",
-    backgroundColor: "#EFF6FF",
+    borderColor: selected ? "#6EE7B7" : "#BFDBFE",
+    backgroundColor: selected ? "#ECFDF5" : "#EFF6FF",
     action: {
       type: "postback",
-      label: truncateLabel(`ชำระ ${name}`, 40),
+      label: truncateLabel(`${selected ? "ยกเลิกเลือก" : "เลือก"} ${name}`, 40),
       data,
-      displayText: `ชำระ ${name}`,
+      ...(selected === undefined ? { displayText: `ชำระ ${name}` } : {}),
     },
     contents: [
       { type: "text", text: name, size: "md", weight: "bold", color: "#111827", wrap: true },
@@ -158,7 +158,7 @@ export function paymentDebtButton(name: string, amount: number, dueDate: string 
           { type: "text", text: formatBaht(amount), size: "sm", weight: "bold", color: "#DC2626", align: "end", flex: 0 },
         ],
       },
-      { type: "text", text: "แตะเพื่อเลือกจ่ายรายการนี้", size: "xs", color: "#2563EB", weight: "bold", wrap: true },
+      { type: "text", text: selected ? "✓ เลือกแล้ว" : "แตะเพื่อเลือก", size: "xs", color: selected ? "#047857" : "#2563EB", weight: "bold", wrap: true },
     ],
   };
 }

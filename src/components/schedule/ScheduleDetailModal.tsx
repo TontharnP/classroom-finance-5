@@ -203,7 +203,7 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
     setReviewingRequestId(requestId);
     try {
       const result = await approveLinePaymentRequest(requestId);
-      if (result.transaction) addTransaction(dbTransactionToTransaction(result.transaction));
+      result.transactions.forEach((transaction) => addTransaction(dbTransactionToTransaction(transaction)));
       setLineRequests((requests) => requests.filter((request) => request.id !== requestId));
       toast.success("อนุมัติและบันทึกชำระเงินแล้ว");
     } catch (error) {
@@ -459,6 +459,15 @@ export function ScheduleDetailModal({ isOpen, onClose, schedule, initialStatusFi
                                     {isCash ? "รอรับเงินสด" : "รอตรวจสลิป"}
                                   </span>
                                 </div>
+                                {request.allocations && (
+                                  <ul className="mt-2 space-y-1 text-xs text-muted">
+                                    {request.allocations.map((allocation) => (
+                                      <li key={allocation.scheduleId}>
+                                        {data.schedules.find((item) => item.id === allocation.scheduleId)?.name ?? "กำหนดการถูกลบ"} • {allocation.amount.toLocaleString()} ฿
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
                                 {request.slipUrl && (
                                   <a href={request.slipUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/35 dark:bg-blue-950/30 dark:text-blue-300">
                                     <ExternalLink className="h-4 w-4" />

@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, BadgePercent, CalendarClock, CheckCircle2, ReceiptText, UsersRound } from "lucide-react";
+import { AlertTriangle, BadgePercent, CalendarClock, CheckCircle2, Pencil, ReceiptText, Trash2, UsersRound } from "lucide-react";
 import toast from "react-hot-toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { buildAdditionalCostPreview } from "@/lib/additionalCosts";
-import { applyAdditionalCost } from "@/lib/supabase/additionalCosts";
+import { Modal } from "@/components/ui/Modal";
+import type { AdditionalCostRun } from "@/types";
+import { buildAdditionalCostPreview, roundMoney } from "@/lib/additionalCosts";
+import { applyAdditionalCost, deleteAdditionalCost, updateAdditionalCost } from "@/lib/supabase/additionalCosts";
 import {
   dbAdditionalCostItemToAdditionalCostItem,
   dbAdditionalCostRunToAdditionalCostRun,
@@ -15,14 +17,28 @@ import { useAppStore } from "@/lib/store";
 const money = (value: number) =>
   value.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+function validPercentage(value: number) {
+  return Number.isFinite(value) && value >= 0.0001 && value <= 100 && Number(value.toFixed(4)) === value;
+}
+
 export default function AdditionalCostsPage() {
   const data = useAppStore((state) => state.data);
-  const addAdditionalCostRun = useAppStore((state) => state.addAdditionalCostRun);
+  const saveAdditionalCostRun = useAppStore((state) => state.saveAdditionalCostRun);
+  const deleteAdditionalCostRun = useAppStore((state) => state.deleteAdditionalCostRun);
+  const [requestKey, setRequestKey] = useState<string | null>(null);
+  const [editingRun, setEditingRun] = useState<AdditionalCostRun | null>(null);
+  const [deletingRun, setDeletingRun] = useState<AdditionalCostRun | null>(null);
+  const [editInput, setEditInput] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [percentageInput, setPercentageInput] = useState("5");
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const percentage = Number(percentageInput);
-  const percentageValid = Number.isFinite(percentage) && percentage > 0 && percentage <= 100;
+  const percentageValid = validPercentage(percentage);
+  const editPercentage = Number(editInput);
+  const editItems = editingRun ? data.additionalCostItems.filter((item) => item.runId === editingRun.id) : [];
+  const editTotal = roundMoney(editItems.reduce(
+    (sum, item) => sum + roundMoney(item.baseOutstanding * editPercentage / 100), 0
+  ));
   const preview = useMemo(
     () => buildAdditionalCostPreview(data, percentageValid ? percentage : 0),
     [data, percentage, percentageValid]
@@ -44,16 +60,47 @@ export default function AdditionalCostsPage() {
   );
 
   async function handleApply() {
-    if (!percentageValid || preview.items.length === 0) return;
+    if (!requestKey) return;
     try {
-      const result = await applyAdditionalCost(percentage, crypto.randomUUID());
-      addAdditionalCostRun(
+      const result = await applyAdditionalCost(percentage, requestKey);
+      saveAdditionalCostRun(
         dbAdditionalCostRunToAdditionalCostRun(result.run),
         result.items.map(dbAdditionalCostItemToAdditionalCostItem)
       );
       toast.success(`เพิ่มค่าใช้จ่าย ${money(result.run.additional_total)} บาท เรียบร้อยแล้ว`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "เพิ่มค่าใช้จ่ายไม่สำเร็จ");
+      throw error;
+    }
+  }
+
+  async function handleEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingRun || !validPercentage(editPercentage) || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const result = await updateAdditionalCost(editingRun.id, editPercentage);
+      saveAdditionalCostRun(
+        dbAdditionalCostRunToAdditionalCostRun(result.run),
+        result.items.map(dbAdditionalCostItemToAdditionalCostItem)
+      );
+      setEditingRun(null);
+      toast.success("บันทึกการแก้ไขแล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "แก้ไขค่าใช้จ่ายไม่สำเร็จ");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deletingRun) return;
+    try {
+      await deleteAdditionalCost(deletingRun.id);
+      deleteAdditionalCostRun(deletingRun.id);
+      toast.success("ลบรอบค่าใช้จ่ายแล้ว");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ลบค่าใช้จ่ายไม่สำเร็จ");
       throw error;
     }
   }
@@ -86,9 +133,9 @@ export default function AdditionalCostsPage() {
                 <input
                   id="additional-cost-percentage"
                   type="number"
-                  min="0.01"
+                  min="0.0001"
                   max="100"
-                  step="0.01"
+                  step="0.0001"
                   inputMode="decimal"
                   value={percentageInput}
                   onChange={(event) => setPercentageInput(event.target.value)}
@@ -102,13 +149,13 @@ export default function AdditionalCostsPage() {
               </p>
               {!percentageValid && percentageInput !== "" && (
                 <p id="additional-cost-error" className="mt-1 text-xs font-medium text-rose-600">
-                  กรุณาระบุเปอร์เซ็นต์มากกว่า 0 และไม่เกิน 100
+                  กรุณาระบุเปอร์เซ็นต์ตั้งแต่ 0.0001 ถึง 100
                 </p>
               )}
 
               <button
                 type="button"
-                onClick={() => setConfirmOpen(true)}
+                onClick={() => setRequestKey(crypto.randomUUID())}
                 disabled={!percentageValid || preview.items.length === 0}
                 className="apple-button pressable mt-4 min-h-11 w-full px-5 py-2.5 disabled:cursor-not-allowed disabled:opacity-45"
               >
@@ -190,7 +237,7 @@ export default function AdditionalCostsPage() {
           ) : (
             <div className="divide-y" style={{ borderColor: "var(--line)" }}>
               {data.additionalCostRuns.map((run) => (
-                <article key={run.id} className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:px-5">
+                <article key={run.id} className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:px-5">
                   <div>
                     <div className="font-medium">เพิ่ม {run.percentage.toLocaleString("th-TH")}%</div>
                     <div className="text-xs text-muted">{formatThaiDateTime(run.createdAt)}</div>
@@ -201,6 +248,16 @@ export default function AdditionalCostsPage() {
                   <div className="font-semibold tabular-nums text-amber-600 dark:text-amber-400 sm:min-w-28 sm:text-right">
                     +{money(run.additionalTotal)} ฿
                   </div>
+                  <div className="flex gap-2">
+                    <button type="button" className="apple-ghost-button gap-1 px-3 py-2 text-sm"
+                      onClick={() => { setEditingRun(run); setEditInput(String(run.percentage)); }}>
+                      <Pencil className="h-4 w-4" aria-hidden="true" /> แก้ไข
+                    </button>
+                    <button type="button" className="apple-ghost-button gap-1 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"
+                      onClick={() => setDeletingRun(run)}>
+                      <Trash2 className="h-4 w-4" aria-hidden="true" /> ลบ
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -209,14 +266,40 @@ export default function AdditionalCostsPage() {
       </div>
 
       <ConfirmDialog
-        isOpen={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
+        isOpen={requestKey !== null}
+        onClose={() => setRequestKey(null)}
         onConfirm={handleApply}
         title="ยืนยันเพิ่มค่าใช้จ่าย"
         message={`เพิ่ม ${percentageValid ? percentage : 0}% เป็นเงิน ${money(preview.additionalTotal)} บาท ให้ ${preview.affectedStudentCount} คน (${preview.overdueItemCount} รายการ) การดำเนินการนี้จะเปลี่ยนยอดค้างจริง`}
         confirmText="ยืนยันเพิ่มค่าใช้จ่าย"
         confirmVariant="primary"
       />
+      <ConfirmDialog
+        isOpen={deletingRun !== null}
+        onClose={() => setDeletingRun(null)}
+        onConfirm={handleDelete}
+        title="ลบรอบค่าใช้จ่าย"
+        message={deletingRun ? `ลบรอบ ${deletingRun.percentage}% วันที่ ${formatThaiDateTime(deletingRun.createdAt)} และหักค่าใช้จ่ายของรอบนี้ออกจากยอดเรียกเก็บหรือไม่?` : ""}
+        confirmText="ยืนยันการลบ"
+      />
+      <Modal isOpen={editingRun !== null} onClose={() => { if (!savingEdit) setEditingRun(null); }} title="แก้ไขรอบค่าใช้จ่าย" size="sm">
+        <form onSubmit={handleEdit} className="space-y-4">
+          <p className="text-sm text-muted">คิดเปอร์เซ็นต์ใหม่จากยอดค้างเดิมของ {editItems.length} รายการในรอบนี้</p>
+          <label className="block text-sm font-medium">
+            ค่าใช้จ่ายเพิ่ม (%)
+            <input type="number" step="0.0001" min="0.0001" max="100" required
+              value={editInput} onChange={(event) => setEditInput(event.target.value)} disabled={savingEdit}
+              className="mt-1 w-full rounded-xl border px-3 py-2" />
+          </label>
+          <p className="apple-soft rounded-xl px-3 py-2 text-sm" aria-live="polite">
+            ค่าใช้จ่ายรอบนี้หลังแก้ไข <strong>{validPercentage(editPercentage) ? `${money(editTotal)} ฿` : "—"}</strong>
+          </p>
+          <button type="submit" className="apple-button w-full justify-center px-4 py-2 disabled:opacity-45"
+            disabled={savingEdit || !validPercentage(editPercentage) || editItems.length === 0 || editPercentage === editingRun?.percentage}>
+            {savingEdit ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }

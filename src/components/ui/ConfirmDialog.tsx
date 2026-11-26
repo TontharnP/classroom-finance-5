@@ -25,6 +25,7 @@ export function ConfirmDialog({
   const [isLoading, setIsLoading] = useState(false);
 
   const handleConfirm = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     try {
       await onConfirm();
@@ -37,7 +38,7 @@ export function ConfirmDialog({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
+    <Modal isOpen={isOpen} onClose={() => { if (!isLoading) onClose(); }} title={title} size="sm">
       <div className="space-y-4">
         <p className="text-zinc-600 dark:text-zinc-400">{message}</p>
         <div className="flex gap-2">

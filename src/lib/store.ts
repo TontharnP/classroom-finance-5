@@ -30,7 +30,8 @@ interface AppState {
   addPocket: (pocket: Pocket) => void;
   updatePocket: (id: string, pocket: Partial<Pocket>) => void;
   deletePocket: (id: string) => void;
-  addAdditionalCostRun: (run: AdditionalCostRun, items: AdditionalCostItem[]) => void;
+  saveAdditionalCostRun: (run: AdditionalCostRun, items: AdditionalCostItem[]) => void;
+  deleteAdditionalCostRun: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -131,7 +132,7 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       data: {
         ...state.data,
-        transactions: [transaction, ...state.data.transactions],
+        transactions: [transaction, ...state.data.transactions.filter((item) => item.id !== transaction.id)],
       },
     })),
 
@@ -205,12 +206,21 @@ export const useAppStore = create<AppState>((set) => ({
       },
     })),
 
-  addAdditionalCostRun: (run, items) =>
+  saveAdditionalCostRun: (run, items) =>
     set((state) => ({
       data: {
         ...state.data,
-        additionalCostRuns: [run, ...state.data.additionalCostRuns],
-        additionalCostItems: [...items, ...state.data.additionalCostItems],
+        additionalCostRuns: [run, ...state.data.additionalCostRuns.filter((existing) => existing.id !== run.id)]
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        additionalCostItems: [...items, ...state.data.additionalCostItems.filter((item) => item.runId !== run.id)],
+      },
+    })),
+  deleteAdditionalCostRun: (id) =>
+    set((state) => ({
+      data: {
+        ...state.data,
+        additionalCostRuns: state.data.additionalCostRuns.filter((run) => run.id !== id),
+        additionalCostItems: state.data.additionalCostItems.filter((item) => item.runId !== id),
       },
     })),
 }));

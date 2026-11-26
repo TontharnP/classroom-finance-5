@@ -21,3 +21,14 @@ export async function applyAdditionalCost(percentage: number, requestKey: string
     body: JSON.stringify({ percentage, requestKey }),
   });
 }
+
+export function updateAdditionalCost(id: string, percentage: number) {
+  return apiRequest<ApplyAdditionalCostResponse>(`/api/additional-costs/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ percentage }),
+  });
+}
+
+export function deleteAdditionalCost(id: string) {
+  return apiRequest<void>(`/api/additional-costs/${id}`, { method: "DELETE" });
+}

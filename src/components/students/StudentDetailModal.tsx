@@ -18,10 +18,15 @@ import {
   updateStudent as updateStudentRemote,
 } from "@/lib/supabase/students";
 import { dbStudentToStudent } from "@/lib/supabase/adapter";
-import { getStudentScheduleTarget } from "@/lib/additionalCosts";
+import { getStudentScheduleTarget, roundMoney } from "@/lib/additionalCosts";
 
 const QuickPayModal = dynamic(
   () => import("../transactions/QuickPayModal").then((module) => module.QuickPayModal),
+  { ssr: false }
+);
+
+const GroupedPaymentModal = dynamic(
+  () => import("../transactions/GroupedPaymentModal").then((module) => module.GroupedPaymentModal),
   { ssr: false }
 );
 
@@ -37,6 +42,7 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
   const [activeTab, setActiveTab] = useState<TabType>("unpaid");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [groupedPaymentOpen, setGroupedPaymentOpen] = useState(false);
   const [quickPayScheduleId, setQuickPayScheduleId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeletingAvatar, setIsDeletingAvatar] = useState(false);
@@ -115,14 +121,14 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
 
   // Calculate payment summary (partial payments remain unpaid until full)
   const studentTransactions = data.transactions.filter(
-    (t) => t.studentId === student.id && t.source === "schedule"
+    (t) => t.studentId === student.id && t.source === "schedule" && t.kind === "income"
   );
 
   // Aggregate paid amount per schedule for this student
   const perSchedulePaid: Record<string, number> = {};
   for (const t of studentTransactions) {
     if (!t.scheduleId) continue;
-    perSchedulePaid[t.scheduleId] = (perSchedulePaid[t.scheduleId] || 0) + t.amount;
+    perSchedulePaid[t.scheduleId] = roundMoney((perSchedulePaid[t.scheduleId] || 0) + t.amount);
   }
 
   // Get all schedules that include this student
@@ -350,6 +356,14 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
               <div className="px-4 py-4 sm:px-6">
                 {activeTab === "unpaid" && (
                   <div className="space-y-2">
+                    {unpaidItems.length > 1 && (
+                      <div className="mb-3 flex justify-end">
+                        <button type="button" onClick={() => setGroupedPaymentOpen(true)}
+                          className="apple-button px-4 py-2 text-sm">
+                          ชำระหลายรายการ
+                        </button>
+                      </div>
+                    )}
                     {unpaidItems.length === 0 ? (
                       <div className="py-12 text-center text-zinc-500">
                         ไม่มีรายการค้างชำระ
@@ -451,6 +465,9 @@ export function StudentDetailModal({ isOpen, onClose, student: initialStudent }:
             onClose={() => setIsEditModalOpen(false)}
             student={student}
           />
+          {groupedPaymentOpen && (
+            <GroupedPaymentModal studentId={student.id} onClose={() => setGroupedPaymentOpen(false)} />
+          )}
           {quickPayScheduleId && (
             <QuickPayModal
               isOpen={!!quickPayScheduleId}

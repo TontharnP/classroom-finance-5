@@ -160,6 +160,7 @@ export function dbLinePaymentRequestToLinePaymentRequest(db: DbLinePaymentReques
     lineUserId: db.line_user_id,
     studentId: db.student_id,
     scheduleId: db.schedule_id,
+    allocations: db.allocations?.map((allocation) => ({ scheduleId: allocation.schedule_id, amount: allocation.amount })),
     method: db.method as UILinePaymentRequest["method"],
     amount: db.amount,
     status: db.status,

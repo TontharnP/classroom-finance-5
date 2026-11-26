@@ -2,13 +2,9 @@ import "server-only";
 
 import { getSupabaseAdmin, isMissingTableError, toNumber, type Row } from "@/lib/supabase/server";
 
-export type AdditionalCostCandidate = {
-  scheduleId: string;
-  studentId: string;
-  baseOutstanding: number;
-  percentage: number;
-  amount: number;
-};
+import { badRequest, noContent, notFound, ok, serverError } from "@/lib/api/response";
+import { mapAdditionalCostItem, mapAdditionalCostRun } from "@/lib/supabase/mappers";
+import { roundMoney } from "@/lib/additionalCosts";
 
 export function additionalCostKey(scheduleId: string, studentId: string) {
   return `${scheduleId}:${studentId}`;
@@ -41,78 +37,26 @@ export async function getAdditionalCostTotals(filters: { scheduleId?: string; st
   return totals;
 }
 
-export async function buildAdditionalCostCandidates(percentage: number) {
-  const today = bangkokDateKey();
-  const [scheduleResult, transactionResult, existingItems] = await Promise.all([
-    getSupabaseAdmin()
-      .from("schedules")
-      .select("id,end_date,student_ids,amount_per_item")
-      .not("end_date", "is", null)
-      .lt("end_date", today),
-    getSupabaseAdmin()
-      .from("transactions")
-      .select("schedule_id,student_id,amount")
-      .eq("source", "schedule")
-      .eq("kind", "income"),
-    listAdditionalCostItemsSafely(),
-  ]);
-  if (scheduleResult.error) throw scheduleResult.error;
-  if (transactionResult.error) throw transactionResult.error;
-  const schedules = (scheduleResult.data ?? []) as Row[];
-  const transactions = (transactionResult.data ?? []) as Row[];
+const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
-  const paid = new Map<string, number>();
-  for (const transaction of transactions) {
-    if (
-      transaction.source !== "schedule" ||
-      transaction.kind !== "income" ||
-      !transaction.schedule_id ||
-      !transaction.student_id
-    ) continue;
-    const key = additionalCostKey(String(transaction.schedule_id), String(transaction.student_id));
-    paid.set(key, roundMoney((paid.get(key) || 0) + toNumber(transaction.amount)));
+export async function mutateAdditionalCostRound(action: "create" | "update" | "delete", id: unknown, percentage?: unknown) {
+  if (typeof id !== "string" || !uuidPattern.test(id)) return badRequest("รหัสรอบค่าใช้จ่ายไม่ถูกต้อง");
+  if (action !== "delete" && (
+    typeof percentage !== "number" || !Number.isFinite(percentage) || percentage <= 0 || percentage > 100
+  )) return badRequest("กรุณาระบุเปอร์เซ็นต์มากกว่า 0 และไม่เกิน 100");
+
+  try {
+    const { data, error } = await getSupabaseAdmin().rpc("mutate_additional_cost_round", {
+      p_action: action,
+      p_id: id,
+      p_percentage: action === "delete" ? null : percentage,
+    });
+    if (error?.code === "22023") return badRequest(error.message);
+    if (error?.code === "P0002") return notFound(error.message);
+    if (error) throw error;
+    if (action === "delete") return noContent();
+    return ok({ run: mapAdditionalCostRun(data.run), items: (data.items as Row[]).map(mapAdditionalCostItem) }, action === "create" ? 201 : 200);
+  } catch (error) {
+    return serverError(error);
   }
-
-  const existingCosts = new Map<string, number>();
-  for (const item of existingItems) {
-    const key = additionalCostKey(String(item.schedule_id), String(item.student_id));
-    existingCosts.set(key, roundMoney((existingCosts.get(key) || 0) + toNumber(item.amount)));
-  }
-
-  const candidates: AdditionalCostCandidate[] = [];
-  for (const schedule of schedules) {
-    const dueDate = schedule.end_date ? String(schedule.end_date).slice(0, 10) : "";
-    if (!dueDate || dueDate >= today || !Array.isArray(schedule.student_ids)) continue;
-
-    const scheduleId = String(schedule.id);
-    for (const rawStudentId of schedule.student_ids) {
-      const studentId = String(rawStudentId);
-      const key = additionalCostKey(scheduleId, studentId);
-      const target = roundMoney(toNumber(schedule.amount_per_item) + (existingCosts.get(key) || 0));
-      const baseOutstanding = Math.max(0, roundMoney(target - (paid.get(key) || 0)));
-      if (baseOutstanding <= 0) continue;
-
-      // The requested percentage is calculated and rounded per overdue item.
-      const amount = roundMoney(baseOutstanding * (percentage / 100));
-      if (amount <= 0) continue;
-      candidates.push({ scheduleId, studentId, baseOutstanding, percentage, amount });
-    }
-  }
-
-  return candidates;
-}
-
-export function roundMoney(value: number) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-function bangkokDateKey() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Bangkok",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
 }

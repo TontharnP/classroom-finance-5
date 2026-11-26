@@ -108,6 +108,9 @@ export function mapLinePaymentRequest(row: Row): LinePaymentRequest {
     line_user_id: String(row.line_user_id),
     student_id: String(row.student_id),
     schedule_id: String(row.schedule_id),
+    allocations: Array.isArray(row.allocations) ? row.allocations.map((allocation: Row) => ({
+      schedule_id: String(allocation.schedule_id), amount: toNumber(allocation.amount),
+    })) : undefined,
     method: row.method ? (String(row.method) as LinePaymentRequest["method"]) : undefined,
     amount: toNumber(row.amount),
     status: String(row.status) as LinePaymentRequest["status"],

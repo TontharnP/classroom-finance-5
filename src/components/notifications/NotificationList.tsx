@@ -4,6 +4,8 @@ import useSWR from "swr";
 import { toast } from "react-hot-toast";
 import { useAppStore } from "@/lib/store";
 import { Check, X, Banknote, Clock, Wallet } from "lucide-react";
+import { approveLinePaymentRequest } from "@/lib/supabase/linePaymentRequests";
+import { dbTransactionToTransaction } from "@/lib/supabase/adapter";
 import type { LinePaymentRequest } from "@/types/supabase";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -15,6 +17,7 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export function NotificationList() {
+  const addTransaction = useAppStore((state) => state.addTransaction);
   const students = useAppStore((state) => state.data.students);
   const schedules = useAppStore((state) => state.data.schedules);
   const { data: requests, error, isLoading, mutate } = useSWR<LinePaymentRequest[]>(
@@ -26,14 +29,13 @@ export function NotificationList() {
   const handleApprove = async (id: string) => {
     try {
       setProcessingId(id);
-      const res = await fetch(`/api/line/payment-requests/${id}/approve`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Approval failed");
+      const result = await approveLinePaymentRequest(id);
+      result.transactions.forEach((transaction) => addTransaction(dbTransactionToTransaction(transaction)));
       toast.success("อนุมัติรายการสำเร็จ");
       mutate();
-    } catch {
-      toast.error("เกิดข้อผิดพลาดในการอนุมัติ");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการอนุมัติ");
+      mutate();
     } finally {
       setProcessingId(null);
     }
@@ -76,7 +78,7 @@ export function NotificationList() {
         const student = students.find((s) => s.id === req.student_id);
         const schedule = schedules.find((s) => s.id === req.schedule_id);
         const studentName = student ? `${student.prefix || ""}${student.firstName} ${student.lastName}` : "ไม่พบนักเรียน";
-        const scheduleName = schedule?.name || "ไม่พบกำหนดการ";
+        const scheduleName = req.allocations ? `ชำระรวม ${req.allocations.length} รายการ` : schedule?.name || "ไม่พบกำหนดการ";
         const isProcessing = processingId === req.id;
         return (
           <div
@@ -116,6 +118,17 @@ export function NotificationList() {
                   </div>
                 </div>
               </div>
+
+              {req.allocations && (
+                <ul className="mb-3 space-y-1 text-sm text-muted">
+                  {req.allocations.map((allocation) => (
+                    <li key={allocation.schedule_id} className="flex justify-between gap-2">
+                      <span>{schedules.find((item) => item.id === allocation.schedule_id)?.name ?? "กำหนดการถูกลบ"}</span>
+                      <span className="shrink-0 tabular-nums">{allocation.amount.toLocaleString()} ฿</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {req.slip_auto_check_result && (
                 <div className="rounded-2xl bg-zinc-100 px-3 py-2 text-xs font-medium leading-relaxed text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 sm:text-sm">
